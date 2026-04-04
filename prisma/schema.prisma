@@ -1,0 +1,205 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String?
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Creator {
+  id                   String         @id @default(cuid())
+  name                 String
+  platform             String         @default("youtube")
+  pageUrl              String?
+  description          String?
+  toneNotes            String?
+  topicFocus           String?
+  styleFingerprintJson Json?
+  trustLevel           String         @default("trusted") // trusted, mixed, speculative, entertainment_only
+  isActive             Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  contentItems         ContentItem[]
+  generatedOutputs     GeneratedOutput[]
+}
+
+model Project {
+  id               String         @id @default(cuid())
+  name             String         @unique
+  description      String?
+  color            String?        @default("#6366f1")
+  icon             String?        @default("folder")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  contentItems     ContentItem[]
+  generatedOutputs GeneratedOutput[]
+}
+
+model Category {
+  id                    String                @id @default(cuid())
+  name                  String                @unique
+  description           String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  contentItemCategories ContentItemCategory[]
+}
+
+model ContentItem {
+  id                     String                @id @default(cuid())
+  sourceType             String                // youtube, youtube_short, screenshot_set, manual_text, user_content, other
+  sourceUrl              String?
+  title                  String
+  creatorNameRaw         String?
+  externalAuthor         String?
+  thumbnailUrl           String?
+  publishedAt            DateTime?
+  rawText                String?               @db.Text
+  transcriptText         String?               @db.Text
+  extractedScreenshotText String?              @db.Text
+  shortSummary           String?               @db.Text
+  detailedSummary        String?               @db.Text
+  hookAnalysisJson       Json?
+  persuasionAngle        String?               @db.Text
+  usefulVsFluffJson      Json?
+  businessTakeawaysJson  Json?
+  categorizationReasoning String?              @db.Text
+  tagsJson               Json?
+  energyStyle            String?
+  audienceFit            String?
+  similarityNotes        String?               @db.Text
+  status                 String                @default("draft") // draft, reviewed, favorite, needs_rewrite, ready_to_record, archived
+  needsTranscript        Boolean               @default(false)
+  targetPublishDate      DateTime?
+  targetPlatform         String?
+  projectId              String?
+  project                Project?              @relation(fields: [projectId], references: [id])
+  savedCreatorId         String?
+  savedCreator           Creator?              @relation(fields: [savedCreatorId], references: [id])
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  categories             ContentItemCategory[]
+  tags                   ContentItemTag[]
+  generatedOutputs       GeneratedOutput[]
+  notes                  Note[]
+
+  @@index([sourceType])
+  @@index([status])
+  @@index([projectId])
+  @@index([savedCreatorId])
+}
+
+model ContentItemCategory {
+  id              String      @id @default(cuid())
+  contentItemId   String
+  contentItem     ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  confidenceScore Float?
+
+  @@unique([contentItemId, categoryId])
+}
+
+model Tag {
+  id               String           @id @default(cuid())
+  name             String           @unique
+  createdAt        DateTime         @default(now())
+  contentItemTags  ContentItemTag[]
+}
+
+model ContentItemTag {
+  id            String      @id @default(cuid())
+  contentItemId String
+  contentItem   ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  tagId         String
+  tag           Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([contentItemId, tagId])
+}
+
+model GeneratedOutput {
+  id               String      @id @default(cuid())
+  contentItemId    String?
+  contentItem      ContentItem? @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
+  projectId        String?
+  project          Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  creatorId        String?
+  creator          Creator?    @relation(fields: [creatorId], references: [id], onDelete: SetNull)
+  outputType       String      // content_idea, facebook_post, discussion_post, email, workshop_lesson, blog_outline, talking_head_script, reel_script, green_screen_script, talking_points, book_note, carousel_outline
+  title            String
+  promptUsed       String?     @db.Text
+  outputText       String      @db.Text
+  similarityScore  Float?
+  originalityLevel String?     @default("medium") // low, medium, high
+  toneMode         String?     @default("educational")
+  contentMode      String?     // educational, story_driven, contrarian, tactical, emotional, authority_building
+  audience         String?
+  feedbackStatus   String?     // nailed_it, too_generic, too_close_to_source, more_tactical, more_like_me
+  reviewStatus     String      @default("draft") // draft, reviewed, favorite, needs_rewrite, ready_to_record, archived
+  targetPublishDate DateTime?
+  targetPlatform   String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  notes            Note[]
+
+  @@index([outputType])
+  @@index([contentItemId])
+  @@index([reviewStatus])
+}
+
+model Note {
+  id                String          @id @default(cuid())
+  contentItemId     String?
+  contentItem       ContentItem?    @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  generatedOutputId String?
+  generatedOutput   GeneratedOutput? @relation(fields: [generatedOutputId], references: [id], onDelete: Cascade)
+  body              String          @db.Text
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model TrendTopic {
+  id         String   @id @default(cuid())
+  topicArea  String   // coaching, mindset, marketing, systems, processes, leadership, ai
+  source     String?
+  headline   String
+  summary    String?  @db.Text
+  sourceUrl  String?
+  score      Float?
+  isRising   Boolean  @default(false)
+  isOverused Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([topicArea])
+}
+
+model ProcessingJob {
+  id           String   @id @default(cuid())
+  jobType      String   // content_analysis, trend_fetch, similarity_check, generation
+  status       String   @default("pending") // pending, processing, completed, failed
+  inputJson    Json?
+  outputJson   Json?
+  errorMessage String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  valueJson Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

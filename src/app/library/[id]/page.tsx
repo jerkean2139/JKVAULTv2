@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -116,6 +116,8 @@ const STATUS_BADGES: Record<string, string> = {
 export default function ContentDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const [content, setContent] = useState(MOCK_CONTENT);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("summary");
   const [status, setStatus] = useState(MOCK_CONTENT.status);
   const [newNote, setNewNote] = useState("");
@@ -124,6 +126,61 @@ export default function ContentDetailPage() {
 
   const contentId = params.id as string;
 
+  useEffect(() => {
+    async function fetchContent() {
+      try {
+        const res = await fetch(`/api/content/${contentId}`);
+        if (res.ok) {
+          const data = await res.json();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const d = data as any;
+          const mapped = {
+            ...MOCK_CONTENT,
+            id: d.id,
+            title: d.title,
+            sourceType: d.sourceType,
+            sourceUrl: d.sourceUrl || "",
+            creator: d.savedCreator?.name || d.creatorNameRaw || "Unknown",
+            status: d.status,
+            createdAt: new Date(d.createdAt).toLocaleDateString(),
+            rawText: d.transcriptText || d.rawText || d.extractedScreenshotText || MOCK_CONTENT.rawText,
+            summary: d.shortSummary || d.detailedSummary || MOCK_CONTENT.summary,
+            insights: Array.isArray(d.businessTakeawaysJson) ? d.businessTakeawaysJson as string[] : MOCK_CONTENT.insights,
+            hooks: d.hookAnalysisJson
+              ? [d.hookAnalysisJson.hook || d.hookAnalysisJson.openingHook || ""].filter(Boolean) as string[]
+              : MOCK_CONTENT.hooks,
+            categories: d.categories?.length
+              ? d.categories.map((c: { category: { name: string } }) => c.category.name) as string[]
+              : MOCK_CONTENT.categories,
+            tags: d.tags?.length
+              ? d.tags.map((t: { tag: { name: string } }) => t.tag.name) as string[]
+              : MOCK_CONTENT.tags,
+            categorizationReasoning: d.categorizationReasoning || MOCK_CONTENT.categorizationReasoning,
+            generatedOutputs: d.generatedOutputs?.length
+              ? d.generatedOutputs.map((o: { id: string; title: string; outputType: string; outputText?: string; reviewStatus?: string }) => ({
+                  id: o.id, type: o.outputType, title: o.title,
+                  preview: o.outputText?.slice(0, 100) || "", status: o.reviewStatus || "draft",
+                }))
+              : MOCK_CONTENT.generatedOutputs,
+            notes: d.notes?.length
+              ? d.notes.map((n: { id: string; body: string; createdAt: string }) => ({
+                  id: n.id, text: n.body, createdAt: n.createdAt,
+                }))
+              : MOCK_CONTENT.notes,
+          };
+          setContent(mapped);
+          setStatus(data.status);
+          setNotes(mapped.notes);
+        }
+      } catch {
+        // Use mock data as fallback
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchContent();
+  }, [contentId]);
+
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     setCopied(label);
@@ -131,12 +188,12 @@ export default function ContentDetailPage() {
   };
 
   const handleExportMarkdown = () => {
-    const md = `# ${MOCK_CONTENT.title}\n\n## Summary\n${MOCK_CONTENT.summary}\n\n## Key Insights\n${MOCK_CONTENT.insights.map((i) => `- ${i}`).join("\n")}\n\n## Hooks\n${MOCK_CONTENT.hooks.map((h) => `- ${h}`).join("\n")}\n\n## Source\n${MOCK_CONTENT.rawText}`;
+    const md = `# ${content.title}\n\n## Summary\n${content.summary}\n\n## Key Insights\n${content.insights.map((i) => `- ${i}`).join("\n")}\n\n## Hooks\n${content.hooks.map((h) => `- ${h}`).join("\n")}\n\n## Source\n${content.rawText}`;
     handleCopy(md, "markdown");
   };
 
   const handleExportText = () => {
-    const txt = `${MOCK_CONTENT.title}\n\nSummary:\n${MOCK_CONTENT.summary}\n\nInsights:\n${MOCK_CONTENT.insights.map((i) => `- ${i}`).join("\n")}\n\nHooks:\n${MOCK_CONTENT.hooks.map((h) => `- ${h}`).join("\n")}`;
+    const txt = `${content.title}\n\nSummary:\n${content.summary}\n\nInsights:\n${content.insights.map((i) => `- ${i}`).join("\n")}\n\nHooks:\n${content.hooks.map((h) => `- ${h}`).join("\n")}`;
     handleCopy(txt, "text");
   };
 
@@ -162,6 +219,16 @@ export default function ContentDetailPage() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-64 rounded bg-card/50 animate-pulse" />
+        <div className="h-48 rounded-xl bg-card/50 animate-pulse" />
+        <div className="h-96 rounded-xl bg-card/50 animate-pulse" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -170,8 +237,8 @@ export default function ContentDetailPage() {
         </Button>
         <div className="flex-1 min-w-0">
           <PageHeader
-            title={MOCK_CONTENT.title}
-            description={`${MOCK_CONTENT.creator} · ${MOCK_CONTENT.sourceType.replace(/_/g, " ")} · ${MOCK_CONTENT.createdAt}`}
+            title={content.title}
+            description={`${content.creator} · ${content.sourceType.replace(/_/g, " ")} · ${content.createdAt}`}
           >
             <div className="flex items-center gap-2">
               <select
@@ -185,7 +252,7 @@ export default function ContentDetailPage() {
                   </option>
                 ))}
               </select>
-              <Button variant="outline" size="sm" onClick={() => handleCopy(MOCK_CONTENT.summary, "summary")}>
+              <Button variant="outline" size="sm" onClick={() => handleCopy(content.summary, "summary")}>
                 {copied === "summary" ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
                 Copy
               </Button>
@@ -234,27 +301,27 @@ export default function ContentDetailPage() {
           <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex-row items-center justify-between">
               <CardTitle className="text-base">Source Content</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => handleCopy(MOCK_CONTENT.rawText, "source")}>
+              <Button variant="outline" size="sm" onClick={() => handleCopy(content.rawText, "source")}>
                 {copied === "source" ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
                 Copy Source
               </Button>
             </CardHeader>
             <CardContent>
-              {MOCK_CONTENT.sourceUrl && (
+              {content.sourceUrl && (
                 <p className="mb-4 text-xs text-muted-foreground">
                   Source:{" "}
                   <a
-                    href={MOCK_CONTENT.sourceUrl}
+                    href={content.sourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-indigo-400 hover:underline"
                   >
-                    {MOCK_CONTENT.sourceUrl}
+                    {content.sourceUrl}
                   </a>
                 </p>
               )}
               <div className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                {MOCK_CONTENT.rawText}
+                {content.rawText}
               </div>
             </CardContent>
           </Card>
@@ -266,7 +333,7 @@ export default function ContentDetailPage() {
               <CardTitle className="text-base">AI Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm leading-relaxed">{MOCK_CONTENT.summary}</p>
+              <p className="text-sm leading-relaxed">{content.summary}</p>
             </CardContent>
           </Card>
         )}
@@ -278,7 +345,7 @@ export default function ContentDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {MOCK_CONTENT.insights.map((insight, i) => (
+                {content.insights.map((insight, i) => (
                   <div
                     key={i}
                     className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 group"
@@ -311,7 +378,7 @@ export default function ContentDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {MOCK_CONTENT.hooks.map((hook, i) => (
+                {content.hooks.map((hook, i) => (
                   <div
                     key={i}
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/20 group"
@@ -342,7 +409,7 @@ export default function ContentDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex gap-2 flex-wrap">
-                  {MOCK_CONTENT.categories.map((cat) => (
+                  {content.categories.map((cat) => (
                     <span
                       key={cat}
                       className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-medium"
@@ -359,7 +426,7 @@ export default function ContentDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex gap-2 flex-wrap">
-                  {MOCK_CONTENT.tags.map((tag) => (
+                  {content.tags.map((tag) => (
                     <span
                       key={tag}
                       className="px-3 py-1 rounded-full bg-muted/50 text-muted-foreground text-xs font-medium"
@@ -376,7 +443,7 @@ export default function ContentDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  {MOCK_CONTENT.categorizationReasoning}
+                  {content.categorizationReasoning}
                 </p>
               </CardContent>
             </Card>
@@ -396,7 +463,7 @@ export default function ContentDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {MOCK_CONTENT.generatedOutputs.map((output) => (
+                {content.generatedOutputs.map((output) => (
                   <Link
                     key={output.id}
                     href={`/ideas`}
@@ -473,7 +540,7 @@ export default function ContentDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {MOCK_CONTENT.similarContent.map((item) => (
+                {content.similarContent.map((item) => (
                   <Link
                     key={item.id}
                     href={`/library/${item.id}`}

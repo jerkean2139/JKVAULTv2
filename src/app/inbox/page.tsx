@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Video,
   Camera,
@@ -10,6 +11,7 @@ import {
   Loader2,
   CheckCircle2,
   Link as LinkIcon,
+  AlertCircle,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +37,8 @@ export default function InboxPage() {
   const [manualText, setManualText] = useState("");
   const [myContentText, setMyContentText] = useState("");
   const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
+  const [createdItemId, setCreatedItemId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const resetForm = () => {
     setYoutubeUrl("");
@@ -43,6 +47,8 @@ export default function InboxPage() {
     setMyContentText("");
     setScreenshotFiles([]);
     setSuccess(false);
+    setCreatedItemId(null);
+    setErrorMsg(null);
   };
 
   const handleSubmit = async () => {
@@ -90,11 +96,14 @@ export default function InboxPage() {
         throw new Error(err.error || "Processing failed");
       }
 
+      const result = await res.json();
       clearInterval(progressInterval);
       setProgress(100);
       setSuccess(true);
-    } catch {
+      setCreatedItemId(result.id || null);
+    } catch (err) {
       clearInterval(progressInterval);
+      setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setProcessing(false);
     }
@@ -291,7 +300,7 @@ export default function InboxPage() {
             </div>
           )}
 
-          {(processing || success) && (
+          {(processing || success || errorMsg) && (
             <div className="mt-6 p-4 rounded-lg bg-muted/20 border border-border/30">
               {processing && (
                 <div className="space-y-3">
@@ -311,9 +320,29 @@ export default function InboxPage() {
                 </div>
               )}
               {success && !processing && (
-                <div className="flex items-center gap-2 text-sm text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Content processed successfully! View it in your Library.</span>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Content processed successfully!</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {createdItemId && (
+                      <Link href={`/library/${createdItemId}`}>
+                        <Button size="sm" className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                          View in Library
+                        </Button>
+                      </Link>
+                    )}
+                    <Link href="/library">
+                      <Button size="sm" variant="outline">Browse Library</Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
+              {errorMsg && !processing && !success && (
+                <div className="flex items-center gap-2 text-sm text-red-400">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>{errorMsg}</span>
                 </div>
               )}
             </div>

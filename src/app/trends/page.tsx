@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -141,18 +141,75 @@ const MOCK_TRENDS: TrendData[] = [
   },
 ];
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapApiTrendsToTrendData(apiTrends: any[]): TrendData[] {
+  // Group by topicArea
+  const grouped: Record<string, typeof apiTrends> = {};
+  for (const t of apiTrends) {
+    const area = (t.topicArea || "other").toLowerCase();
+    if (!grouped[area]) grouped[area] = [];
+    grouped[area].push(t);
+  }
+
+  return Object.entries(grouped).map(([area, items]) => {
+    const risingTopics = items
+      .filter((t) => t.isRising)
+      .map((t) => ({ topic: t.headline || t.summary || area, score: t.score ?? 50 }));
+    const topHeadlines = items.map((t) => t.headline || t.summary || "").filter(Boolean);
+    const overusedWarnings = items
+      .filter((t) => t.isOverused)
+      .map((t) => t.headline || t.summary || "")
+      .filter(Boolean);
+    const scores = items.map((t) => t.score ?? 50);
+    const opportunityScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+
+    return {
+      area,
+      risingTopics: risingTopics.length > 0 ? risingTopics : [{ topic: "Emerging", score: opportunityScore }],
+      topHeadlines: topHeadlines.slice(0, 3),
+      overusedWarnings,
+      opportunityScore,
+    };
+  });
+}
+
 export default function TrendsPage() {
   const [refreshing, setRefreshing] = useState(false);
-  const [trends] = useState(MOCK_TRENDS);
+  const [loading, setLoading] = useState(true);
+  const [trends, setTrends] = useState<TrendData[]>(MOCK_TRENDS);
+
+  const fetchTrends = async () => {
+    try {
+      const res = await fetch("/api/trends");
+      if (!res.ok) throw new Error("Failed to fetch trends");
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setTrends(mapApiTrendsToTrendData(data));
+      }
+      // If empty array, keep existing data
+    } catch {
+      // Keep mock/existing data as fallback
+    }
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      await fetchTrends();
+      setLoading(false);
+    };
+    init();
+  }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await fetch("/api/trends/refresh", { method: "POST" });
+      await fetch("/api/trends", { method: "POST" });
+      await fetchTrends();
     } catch {
-      // API not ready
+      // Keep existing data
+    } finally {
+      setRefreshing(false);
     }
-    setTimeout(() => setRefreshing(false), 2000);
   };
 
   return (
@@ -172,109 +229,143 @@ export default function TrendsPage() {
         </Button>
       </PageHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {trends
-          .sort((a, b) => b.opportunityScore - a.opportunityScore)
-          .slice(0, 4)
-          .map((trend) => (
-            <Card key={trend.area} className="border-border/50 bg-card/50 backdrop-blur-sm p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${TREND_ICONS[trend.area]}`}>
-                  {trend.area}
-                </span>
-                <div className="flex items-center gap-1">
-                  <Target className="h-3 w-3 text-indigo-400" />
-                  <span className="text-lg font-bold text-indigo-400">
-                    {trend.opportunityScore}
-                  </span>
+      {loading ? (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="border-border/50 bg-card/50 backdrop-blur-sm p-4 animate-pulse">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="h-5 w-16 rounded-full bg-muted/50" />
+                  <div className="h-6 w-8 rounded bg-muted/50" />
                 </div>
-              </div>
-              <p className="text-xs text-muted-foreground">Opportunity Score</p>
-            </Card>
-          ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        {trends.map((trend) => (
-          <Card
-            key={trend.area}
-            className="border-border/50 bg-card/50 backdrop-blur-sm"
-          >
-            <CardHeader className="flex-row items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${TREND_ICONS[trend.area]}`}>
-                  {trend.area}
-                </span>
-              </CardTitle>
-              <div className="flex items-center gap-1.5">
-                <Target className="h-3.5 w-3.5 text-indigo-400" />
-                <span className="text-sm font-bold text-indigo-400">
-                  {trend.opportunityScore}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-5">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="text-xs font-medium text-emerald-400">Rising Topics</span>
+                <div className="h-3 w-24 rounded bg-muted/30" />
+              </Card>
+            ))}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="border-border/50 bg-card/50 backdrop-blur-sm animate-pulse">
+                <CardHeader>
+                  <div className="h-5 w-20 rounded-full bg-muted/50" />
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="h-3 w-full rounded bg-muted/30" />
+                    <div className="h-3 w-3/4 rounded bg-muted/30" />
+                    <div className="h-3 w-2/3 rounded bg-muted/30" />
                   </div>
-                  <div className="space-y-2">
-                    {trend.risingTopics.map((topic) => (
-                      <div key={topic.topic} className="flex items-center justify-between">
-                        <span className="text-sm">{topic.topic}</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
-                              style={{ width: `${topic.score}%` }}
-                            />
-                          </div>
-                          <span className="text-xs font-medium text-emerald-400 w-6 text-right">
-                            {topic.score}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Flame className="h-3.5 w-3.5 text-amber-400" />
-                    <span className="text-xs font-medium text-amber-400">Top Headlines</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {trend.topHeadlines.map((headline, i) => (
-                      <p key={i} className="text-xs text-muted-foreground leading-relaxed">
-                        &bull; {headline}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
-                    <span className="text-xs font-medium text-red-400">Overused - Avoid</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {trend.overusedWarnings.map((warning) => (
-                      <span
-                        key={warning}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20"
-                      >
-                        {warning}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {trends
+              .sort((a, b) => b.opportunityScore - a.opportunityScore)
+              .slice(0, 4)
+              .map((trend) => (
+                <Card key={trend.area} className="border-border/50 bg-card/50 backdrop-blur-sm p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${TREND_ICONS[trend.area] || "bg-zinc-500/20 text-zinc-400"}`}>
+                      {trend.area}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Target className="h-3 w-3 text-indigo-400" />
+                      <span className="text-lg font-bold text-indigo-400">
+                        {trend.opportunityScore}
                       </span>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                  <p className="text-xs text-muted-foreground">Opportunity Score</p>
+                </Card>
+              ))}
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {trends.map((trend) => (
+              <Card
+                key={trend.area}
+                className="border-border/50 bg-card/50 backdrop-blur-sm"
+              >
+                <CardHeader className="flex-row items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${TREND_ICONS[trend.area] || "bg-zinc-500/20 text-zinc-400"}`}>
+                      {trend.area}
+                    </span>
+                  </CardTitle>
+                  <div className="flex items-center gap-1.5">
+                    <Target className="h-3.5 w-3.5 text-indigo-400" />
+                    <span className="text-sm font-bold text-indigo-400">
+                      {trend.opportunityScore}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-5">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+                        <span className="text-xs font-medium text-emerald-400">Rising Topics</span>
+                      </div>
+                      <div className="space-y-2">
+                        {trend.risingTopics.map((topic) => (
+                          <div key={topic.topic} className="flex items-center justify-between">
+                            <span className="text-sm">{topic.topic}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
+                                  style={{ width: `${topic.score}%` }}
+                                />
+                              </div>
+                              <span className="text-xs font-medium text-emerald-400 w-6 text-right">
+                                {topic.score}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Flame className="h-3.5 w-3.5 text-amber-400" />
+                        <span className="text-xs font-medium text-amber-400">Top Headlines</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {trend.topHeadlines.map((headline, i) => (
+                          <p key={i} className="text-xs text-muted-foreground leading-relaxed">
+                            &bull; {headline}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+                        <span className="text-xs font-medium text-red-400">Overused - Avoid</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {trend.overusedWarnings.map((warning) => (
+                          <span
+                            key={warning}
+                            className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20"
+                          >
+                            {warning}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

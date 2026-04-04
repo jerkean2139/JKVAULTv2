@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Calendar,
   Settings,
+  HelpCircle,
   Brain,
   ChevronLeft,
   ChevronRight,
@@ -31,6 +32,7 @@ const navItems = [
   { href: "/trends", label: "Trends", icon: TrendingUp },
   { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/guide", label: "User Guide", icon: HelpCircle },
 ];
 
 export function Sidebar() {

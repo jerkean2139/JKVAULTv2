@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FolderKanban,
   Plus,
@@ -80,24 +80,77 @@ const MOCK_PROJECTS: Project[] = [
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
+  const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addingProject, setAddingProject] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", color: "#6366f1", description: "" });
 
-  const handleAdd = () => {
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const res = await fetch("/api/projects");
+        if (!res.ok) throw new Error("Failed to fetch projects");
+        const data = await res.json();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapped = data.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          color: p.color || "#6366f1",
+          description: p.description || "",
+          contentCount: p._count?.contentItems ?? 0,
+        }));
+        setProjects(mapped);
+      } catch {
+        // Keep mock data as fallback
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProjects();
+  }, []);
+
+  const handleAdd = async () => {
     if (!form.name.trim()) return;
-    setProjects((prev) => [
-      ...prev,
-      {
-        id: `new-${Date.now()}`,
-        name: form.name,
-        color: form.color,
-        description: form.description,
-        contentCount: 0,
-      },
-    ]);
-    setForm({ name: "", color: "#6366f1", description: "" });
-    setShowAddDialog(false);
+    setAddingProject(true);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setProjects((prev) => [
+          ...prev,
+          {
+            id: created.id,
+            name: created.name,
+            color: created.color || form.color,
+            description: created.description || form.description,
+            contentCount: 0,
+          },
+        ]);
+      } else {
+        throw new Error("Failed to create");
+      }
+    } catch {
+      // Fallback: add locally
+      setProjects((prev) => [
+        ...prev,
+        {
+          id: `new-${Date.now()}`,
+          name: form.name,
+          color: form.color,
+          description: form.description,
+          contentCount: 0,
+        },
+      ]);
+    } finally {
+      setAddingProject(false);
+      setForm({ name: "", color: "#6366f1", description: "" });
+      setShowAddDialog(false);
+    }
   };
 
   const handleEditSave = () => {
@@ -136,7 +189,23 @@ export default function ProjectsPage() {
         </Button>
       </PageHeader>
 
-      {projects.length === 0 ? (
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="border-border/50 bg-card/50 backdrop-blur-sm">
+              <CardContent className="pt-5 h-[140px] animate-pulse">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-3 h-3 rounded-full bg-muted/50" />
+                  <div className="h-4 w-24 rounded bg-muted/50" />
+                </div>
+                <div className="h-3 w-full rounded bg-muted/30 mb-3" />
+                <div className="h-3 w-2/3 rounded bg-muted/30 mb-3" />
+                <div className="h-3 w-20 rounded bg-muted/30" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : projects.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
           title="No projects yet"
@@ -279,10 +348,10 @@ export default function ProjectsPage() {
                 </Button>
                 <Button
                   onClick={handleAdd}
-                  disabled={!form.name.trim()}
+                  disabled={!form.name.trim() || addingProject}
                   className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white"
                 >
-                  Create Project
+                  {addingProject ? "Creating..." : "Create Project"}
                 </Button>
               </div>
             </div>

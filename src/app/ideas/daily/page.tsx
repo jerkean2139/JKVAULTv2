@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Zap,
@@ -76,18 +76,79 @@ const MOCK_CONTRARIAN = {
   text: "CONTRARIAN TAKE: 'Stop creating content. Start creating systems.' Everyone says 'just post more.' That's the worst advice in 2026. The creators winning right now aren't posting more - they're building content SYSTEMS that produce 10x output from 1x effort. Posting more without a system is just organized chaos with better lighting.",
 };
 
+interface DailyIdeasData {
+  contentIdeas: { id: string; text: string }[];
+  videoIdeas: { id: string; text: string; format?: string }[];
+  teachingIdeas: { id: string; text: string }[];
+  contrarianTake: { id: string; text: string };
+}
+
 export default function DailyIdeasPage() {
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
+  const [data, setData] = useState<DailyIdeasData>({
+    contentIdeas: MOCK_CONTENT_IDEAS,
+    videoIdeas: MOCK_VIDEO_IDEAS,
+    teachingIdeas: MOCK_TEACHING_IDEAS,
+    contrarianTake: MOCK_CONTRARIAN,
+  });
+
+  const fetchDaily = async () => {
+    try {
+      const res = await fetch("/api/ideas/daily");
+      if (!res.ok) throw new Error("Failed to fetch daily ideas");
+      const apiData = await res.json();
+
+      const contentIdeas = (apiData.contentIdeas || []).map((text: string, i: number) => ({
+        id: `d${i + 1}`,
+        text,
+      }));
+      const videoIdeas = (apiData.videoIdeas || []).map((text: string, i: number) => {
+        let format: string | undefined;
+        if (text.toUpperCase().startsWith("TALKING HEAD")) format = "Talking Head";
+        else if (text.toUpperCase().startsWith("GREEN SCREEN")) format = "Green Screen";
+        else if (text.toUpperCase().startsWith("REEL")) format = "Reel";
+        return { id: `v${i + 1}`, text, format };
+      });
+      const teachingIdeas = (apiData.teachingIdeas || []).map((text: string, i: number) => ({
+        id: `t${i + 1}`,
+        text,
+      }));
+      const contrarianTake = apiData.contrarianTake
+        ? { id: "c1", text: apiData.contrarianTake }
+        : MOCK_CONTRARIAN;
+
+      if (contentIdeas.length > 0 || videoIdeas.length > 0 || teachingIdeas.length > 0) {
+        setData({
+          contentIdeas: contentIdeas.length > 0 ? contentIdeas : MOCK_CONTENT_IDEAS,
+          videoIdeas: videoIdeas.length > 0 ? videoIdeas : MOCK_VIDEO_IDEAS,
+          teachingIdeas: teachingIdeas.length > 0 ? teachingIdeas : MOCK_TEACHING_IDEAS,
+          contrarianTake,
+        });
+      }
+    } catch {
+      // Keep mock data as fallback
+    }
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      await fetchDaily();
+      setLoading(false);
+    };
+    init();
+  }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await fetch("/api/ideas/daily", { method: "POST" });
+      await fetchDaily();
     } catch {
-      // API not ready
+      // Keep existing data
+    } finally {
+      setRefreshing(false);
     }
-    setTimeout(() => setRefreshing(false), 1500);
   };
 
   const handleCopy = (text: string, id: string) => {
@@ -134,6 +195,13 @@ export default function DailyIdeasPage() {
     </div>
   );
 
+  const SkeletonCard = () => (
+    <div className="p-4 rounded-lg bg-muted/20 animate-pulse">
+      <div className="h-3 w-full rounded bg-muted/30 mb-2" />
+      <div className="h-3 w-3/4 rounded bg-muted/30" />
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader title="Daily Ideas" description="Fresh content ideas generated just for you today">
@@ -158,99 +226,164 @@ export default function DailyIdeasPage() {
         </div>
       </PageHeader>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Lightbulb className="h-4 w-4 text-amber-400" />
-              5 Content Ideas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {MOCK_CONTENT_IDEAS.map((idea) => (
-                <IdeaCard key={idea.id} id={idea.id} text={idea.text} />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      {loading ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 text-amber-400" />
+                5 Content Ideas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Video className="h-4 w-4 text-red-400" />
+                3 Video Ideas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-emerald-400" />
+                2 Teaching Ideas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm lg:col-span-2 animate-pulse">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-400" />
+                1 Contrarian Take
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="p-5 rounded-xl bg-gradient-to-br from-orange-500/5 to-red-500/5 border border-orange-500/20">
+                <div className="h-3 w-full rounded bg-muted/30 mb-2" />
+                <div className="h-3 w-full rounded bg-muted/30 mb-2" />
+                <div className="h-3 w-2/3 rounded bg-muted/30" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 text-amber-400" />
+                {data.contentIdeas.length} Content Ideas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {data.contentIdeas.map((idea) => (
+                  <IdeaCard key={idea.id} id={idea.id} text={idea.text} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Video className="h-4 w-4 text-red-400" />
-              3 Video Ideas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {MOCK_VIDEO_IDEAS.map((idea) => (
-                <IdeaCard
-                  key={idea.id}
-                  id={idea.id}
-                  text={idea.text}
-                  extra={idea.format}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Video className="h-4 w-4 text-red-400" />
+                {data.videoIdeas.length} Video Ideas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {data.videoIdeas.map((idea) => (
+                  <IdeaCard
+                    key={idea.id}
+                    id={idea.id}
+                    text={idea.text}
+                    extra={idea.format}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <GraduationCap className="h-4 w-4 text-emerald-400" />
-              2 Teaching Ideas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {MOCK_TEACHING_IDEAS.map((idea) => (
-                <IdeaCard key={idea.id} id={idea.id} text={idea.text} />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-emerald-400" />
+                {data.teachingIdeas.length} Teaching Ideas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {data.teachingIdeas.map((idea) => (
+                  <IdeaCard key={idea.id} id={idea.id} text={idea.text} />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-orange-400" />
-              1 Contrarian Take
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="p-5 rounded-xl bg-gradient-to-br from-orange-500/5 to-red-500/5 border border-orange-500/20">
-              <div className="flex items-start gap-3">
-                <div className="flex-1">
-                  <p className="text-sm leading-relaxed font-medium">
-                    {MOCK_CONTRARIAN.text}
-                  </p>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  <button
-                    onClick={() => handleCopy(MOCK_CONTRARIAN.text, MOCK_CONTRARIAN.id)}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                  >
-                    {copied === MOCK_CONTRARIAN.id ? (
-                      <Check className="h-3.5 w-3.5 text-emerald-400" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                  <Link
-                    href={`/generate?ideaText=${encodeURIComponent(MOCK_CONTRARIAN.text)}`}
-                  >
-                    <button className="p-1.5 rounded-md text-muted-foreground hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors">
-                      <Sparkles className="h-3.5 w-3.5" />
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-400" />
+                1 Contrarian Take
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="p-5 rounded-xl bg-gradient-to-br from-orange-500/5 to-red-500/5 border border-orange-500/20">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1">
+                    <p className="text-sm leading-relaxed font-medium">
+                      {data.contrarianTake.text}
+                    </p>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      onClick={() => handleCopy(data.contrarianTake.text, data.contrarianTake.id)}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    >
+                      {copied === data.contrarianTake.id ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
                     </button>
-                  </Link>
+                    <Link
+                      href={`/generate?ideaText=${encodeURIComponent(data.contrarianTake.text)}`}
+                    >
+                      <button className="p-1.5 rounded-md text-muted-foreground hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors">
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </button>
+                    </Link>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

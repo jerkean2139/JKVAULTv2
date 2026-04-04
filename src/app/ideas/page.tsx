@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   Lightbulb,
@@ -134,6 +134,37 @@ export default function IdeasPage() {
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterAudience, setFilterAudience] = useState("All");
   const [ideas, setIdeas] = useState(MOCK_IDEAS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchIdeas = async () => {
+      try {
+        const res = await fetch("/api/generate?limit=50");
+        if (!res.ok) throw new Error("Failed to fetch ideas");
+        const data = await res.json();
+        const items = data.items || data;
+        if (Array.isArray(items) && items.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const mapped = items.map((item: any) => ({
+            id: item.id,
+            title: item.title || "Untitled",
+            outputType: item.outputType || "content_idea",
+            preview: (item.outputText || "").slice(0, 200),
+            status: item.reviewStatus || "draft",
+            audience: item.audience || "",
+            feedback: item.feedbackStatus || null,
+            createdAt: item.createdAt ? new Date(item.createdAt).toISOString().split("T")[0] : "",
+          }));
+          setIdeas(mapped);
+        }
+      } catch {
+        // Keep mock data as fallback
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchIdeas();
+  }, []);
 
   const filteredIdeas = useMemo(() => {
     let items = [...ideas];
@@ -193,7 +224,30 @@ export default function IdeasPage() {
         </select>
       </div>
 
-      {filteredIdeas.length === 0 ? (
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="border-border/50 bg-card/50 backdrop-blur-sm p-5 h-[200px] animate-pulse flex flex-col">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-5 w-16 rounded-full bg-muted/50" />
+                <div className="h-5 w-14 rounded-full bg-muted/30" />
+              </div>
+              <div className="h-4 w-3/4 rounded bg-muted/50 mb-2" />
+              <div className="h-3 w-full rounded bg-muted/30 mb-1" />
+              <div className="h-3 w-full rounded bg-muted/30 mb-1" />
+              <div className="h-3 w-2/3 rounded bg-muted/30 flex-1" />
+              <div className="flex items-center justify-between mt-auto pt-3 border-t border-border/20">
+                <div className="flex gap-1">
+                  <div className="h-6 w-6 rounded bg-muted/30" />
+                  <div className="h-6 w-6 rounded bg-muted/30" />
+                  <div className="h-6 w-6 rounded bg-muted/30" />
+                </div>
+                <div className="h-3 w-16 rounded bg-muted/30" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : filteredIdeas.length === 0 ? (
         <EmptyState
           icon={Lightbulb}
           title="No ideas found"

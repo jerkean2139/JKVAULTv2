@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Users, Plus, X, Video, Camera, Globe, Shield } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
@@ -108,7 +108,9 @@ const MOCK_CREATORS = [
 
 export default function CreatorsPage() {
   const [creators, setCreators] = useState(MOCK_CREATORS);
+  const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addingCreator, setAddingCreator] = useState(false);
   const [newCreator, setNewCreator] = useState({
     name: "",
     platform: "youtube",
@@ -116,20 +118,75 @@ export default function CreatorsPage() {
     description: "",
   });
 
-  const handleAddCreator = () => {
-    if (!newCreator.name.trim()) return;
-    const created = {
-      id: `new-${Date.now()}`,
-      name: newCreator.name,
-      platform: newCreator.platform,
-      contentCount: 0,
-      trustLevel: newCreator.trustLevel,
-      topThemes: [],
-      description: newCreator.description,
+  useEffect(() => {
+    const fetchCreators = async () => {
+      try {
+        const res = await fetch("/api/creators");
+        if (!res.ok) throw new Error("Failed to fetch creators");
+        const data = await res.json();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapped = data.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          platform: c.platform || "web",
+          contentCount: c._count?.contentItems ?? 0,
+          trustLevel: c.trustLevel || "mixed",
+          topThemes: c.topThemes || [],
+          description: c.description || "",
+        }));
+        setCreators(mapped);
+      } catch {
+        // Keep mock data as fallback
+      } finally {
+        setLoading(false);
+      }
     };
-    setCreators((prev) => [...prev, created]);
-    setNewCreator({ name: "", platform: "youtube", trustLevel: "mixed", description: "" });
-    setShowAddDialog(false);
+    fetchCreators();
+  }, []);
+
+  const handleAddCreator = async () => {
+    if (!newCreator.name.trim()) return;
+    setAddingCreator(true);
+    try {
+      const res = await fetch("/api/creators", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCreator),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setCreators((prev) => [
+          ...prev,
+          {
+            id: created.id,
+            name: created.name,
+            platform: created.platform || newCreator.platform,
+            contentCount: 0,
+            trustLevel: created.trustLevel || newCreator.trustLevel,
+            topThemes: created.topThemes || [],
+            description: created.description || newCreator.description,
+          },
+        ]);
+      } else {
+        throw new Error("Failed to create");
+      }
+    } catch {
+      // Fallback: add locally
+      const created = {
+        id: `new-${Date.now()}`,
+        name: newCreator.name,
+        platform: newCreator.platform,
+        contentCount: 0,
+        trustLevel: newCreator.trustLevel,
+        topThemes: [],
+        description: newCreator.description,
+      };
+      setCreators((prev) => [...prev, created]);
+    } finally {
+      setAddingCreator(false);
+      setNewCreator({ name: "", platform: "youtube", trustLevel: "mixed", description: "" });
+      setShowAddDialog(false);
+    }
   };
 
   return (
@@ -157,7 +214,26 @@ export default function CreatorsPage() {
         />
       </div>
 
-      {creators.length === 0 ? (
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="border-border/50 bg-card/50 backdrop-blur-sm p-5 h-[160px] animate-pulse">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="h-10 w-10 rounded-full bg-muted/50" />
+                <div className="space-y-2 flex-1">
+                  <div className="h-4 w-24 rounded bg-muted/50" />
+                  <div className="h-3 w-16 rounded bg-muted/30" />
+                </div>
+              </div>
+              <div className="h-3 w-full rounded bg-muted/30 mb-3" />
+              <div className="flex gap-1">
+                <div className="h-5 w-14 rounded-full bg-muted/30" />
+                <div className="h-5 w-14 rounded-full bg-muted/30" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : creators.length === 0 ? (
         <EmptyState
           icon={Users}
           title="No creators tracked yet"
@@ -279,10 +355,10 @@ export default function CreatorsPage() {
                 </Button>
                 <Button
                   onClick={handleAddCreator}
-                  disabled={!newCreator.name.trim()}
+                  disabled={!newCreator.name.trim() || addingCreator}
                   className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white"
                 >
-                  Add Creator
+                  {addingCreator ? "Adding..." : "Add Creator"}
                 </Button>
               </div>
             </div>

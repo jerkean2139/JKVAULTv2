@@ -61,28 +61,34 @@ export default function InboxPage() {
     }, 300);
 
     try {
-      const formData = new FormData();
-      formData.append("tab", activeTab);
+      let body: Record<string, string> = {};
 
       if (activeTab === "youtube") {
-        formData.append("url", youtubeUrl);
-        formData.append("sourceType", "youtube");
+        body = { sourceType: "youtube", sourceUrl: youtubeUrl };
       } else if (activeTab === "screenshot") {
-        screenshotFiles.forEach((f) => formData.append("files", f));
-        formData.append("sourceType", "screenshot_set");
+        // For screenshots, we'd normally do OCR server-side
+        // In mock mode, we send placeholder text
+        body = {
+          sourceType: "screenshot_set",
+          title: `Screenshots (${screenshotFiles.length} files)`,
+          screenshotText: screenshotFiles.map((f) => `[Screenshot: ${f.name}]`).join("\n"),
+        };
       } else if (activeTab === "manual") {
-        formData.append("title", manualTitle);
-        formData.append("rawText", manualText);
-        formData.append("sourceType", "manual_text");
+        body = { sourceType: "manual_text", title: manualTitle, rawText: manualText };
       } else {
-        formData.append("rawText", myContentText);
-        formData.append("sourceType", "user_content");
+        body = { sourceType: "user_content", title: "My Content", rawText: myContentText };
       }
 
-      await fetch("/api/content/process", {
+      const res = await fetch("/api/content/process", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Processing failed");
+      }
 
       clearInterval(progressInterval);
       setProgress(100);

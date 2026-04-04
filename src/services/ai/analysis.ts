@@ -52,12 +52,27 @@ export function mockAnalyzeContent(
   _text: string
 ): AnalysisResult {
   return {
-    shortSummary: `"${title}" explores practical strategies for business growth, focusing on actionable systems that small business owners and agents can implement immediately. The core message centers on building repeatable processes rather than relying on motivation.`,
-    detailedSummary: `This content dives deep into the mechanics of sustainable business growth for service-based professionals. The author presents a framework for systematizing client acquisition and retention that doesn't depend on constant hustle or viral moments.
+    shortSummary: `"${title}" explores practical strategies for business growth, focusing on actionable systems that small business owners and agents can implement immediately. The core message centers on building repeatable processes rather than relying on motivation alone.
 
-The key thesis is that most small business owners spend 80% of their time on activities that generate less than 20% of their revenue. By implementing three specific systems—automated follow-up sequences, referral trigger events, and weekly accountability metrics—practitioners can reclaim 10+ hours per week while actually increasing output.
+The author breaks down a clear framework for moving from "founder-dependent" operations to systemized, scalable workflows. This includes automated follow-up sequences, referral trigger events, and weekly accountability metrics — all designed to reduce the owner's hands-on time while increasing revenue output.
 
-The content is particularly relevant for State Farm agents and coaches who struggle with the feast-or-famine cycle. Real case studies are cited, including an agent who went from 15 to 47 policies per month using the outlined approach.`,
+Key takeaways include:
+- Most business owners spend 80% of their time on activities generating less than 20% of revenue
+- Three core systems (follow-up, referrals, accountability) can reclaim 10+ hours/week
+- The framework is battle-tested across insurance agencies and coaching businesses
+- Implementation difficulty is low — the biggest barrier is simply starting the documentation process`,
+    detailedSummary: `This content dives deep into the mechanics of sustainable business growth for service-based professionals. The author presents a framework for systematizing client acquisition and retention that doesn't depend on constant hustle or viral moments. The central argument is that "hard work" is necessary but insufficient — what separates 6-figure businesses from 7-figure businesses is operational architecture, not effort.
+
+The key thesis is that most small business owners spend 80% of their time on activities that generate less than 20% of their revenue. By implementing three specific systems — automated follow-up sequences, referral trigger events, and weekly accountability metrics — practitioners can reclaim 10+ hours per week while actually increasing output. The author provides specific implementation steps for each system, including tool recommendations and timeline expectations.
+
+The content is particularly relevant for State Farm agents and coaches who struggle with the feast-or-famine cycle. Real case studies are cited, including an agent who went from 15 to 47 policies per month using the outlined approach. The author emphasizes that perfect systems aren't the goal — started systems are. A "good enough" SOP that exists will always outperform a perfect process that lives only in the founder's head.
+
+Key actionable points:
+- Document your top 5 time-consuming processes this week (even rough notes count)
+- Build a 3-touch automated follow-up sequence for every new lead
+- Create "referral trigger events" at specific points in the client journey
+- Implement a weekly 15-minute metrics review using just 4 numbers: leads in, conversations had, proposals sent, deals closed
+- Assign an owner to every system — a process without an owner is just a document nobody reads`,
     hookAnalysis: {
       openingHook:
         "Opens with a provocative question: 'What if I told you that your hardest-working competitor is actually doing less than you?'",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Play,
   Pause,
@@ -10,6 +10,7 @@ import {
   Minus,
   Plus,
   FlipHorizontal,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -56,16 +57,40 @@ Bundle your solutions. Stack the value. Add a guarantee that demonstrates YOUR c
 If this framework resonated, drop a comment below with your current offer and I'll tell you the number one thing I'd change to make it irresistible.`;
 
 export default function TeleprompterPage() {
+  const params = useParams();
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number | null>(null);
   const lastTimestampRef = useRef<number | null>(null);
 
+  const scriptId = params.id as string;
+  const [scriptText, setScriptText] = useState(MOCK_SCRIPT_TEXT);
+  const [loading, setLoading] = useState(true);
   const [fontSize, setFontSize] = useState(32);
   const [scrollSpeed, setScrollSpeed] = useState(50);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMirrored, setIsMirrored] = useState(false);
   const [showControls, setShowControls] = useState(true);
+
+  useEffect(() => {
+    async function fetchScript() {
+      try {
+        const res = await fetch(`/api/generate/${scriptId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.generatedText) {
+            // Strip markdown bold markers for clean teleprompter text
+            const cleaned = data.generatedText.replace(/\*\*/g, "");
+            setScriptText(cleaned);
+          }
+        }
+      } catch {
+        // Fall back to mock
+      }
+      setLoading(false);
+    }
+    fetchScript();
+  }, [scriptId]);
 
   const scrollStep = useCallback(() => {
     if (!scrollRef.current) return;
@@ -138,6 +163,14 @@ export default function TeleprompterPage() {
       clearTimeout(timeout);
     };
   }, [isPlaying]);
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-black text-white flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black text-white flex flex-col">
@@ -245,7 +278,7 @@ export default function TeleprompterPage() {
             className="whitespace-pre-wrap leading-[1.6] font-medium text-center"
             style={{ fontSize: `${fontSize}px` }}
           >
-            {MOCK_SCRIPT_TEXT.split("---").map((section, i) => (
+            {scriptText.split("---").map((section, i) => (
               <div key={i} className={i > 0 ? "mt-12" : ""}>
                 {section.trim()}
               </div>

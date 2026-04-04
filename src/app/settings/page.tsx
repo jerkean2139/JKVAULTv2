@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Save,
   Loader2,
@@ -81,6 +81,50 @@ export default function SettingsPage() {
   const [markdownExport, setMarkdownExport] = useState(true);
 
   const [creatorsLocal, setCreatorsLocal] = useState(MOCK_CREATORS);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Load saved settings and real creators on mount
+  useEffect(() => {
+    async function loadData() {
+      const [settingsRes, creatorsRes] = await Promise.allSettled([
+        fetch("/api/settings").then((r) => r.ok ? r.json() : null),
+        fetch("/api/creators").then((r) => r.ok ? r.json() : null),
+      ]);
+
+      if (settingsRes.status === "fulfilled" && settingsRes.value) {
+        const s = settingsRes.value;
+        if (s.methodologyName) setMethodologyName(s.methodologyName as string);
+        if (s.methodologyDescription) setMethodologyDescription(s.methodologyDescription as string);
+        if (s.toneNotes) setToneNotes(s.toneNotes as string);
+        if (s.contentGoals) setContentGoals(s.contentGoals as string);
+        if (Array.isArray(s.prohibitedPhrases)) setProhibitedPhrases((s.prohibitedPhrases as string[]).join(", "));
+        if (Array.isArray(s.preferredPhrases)) setPreferredPhrases((s.preferredPhrases as string[]).join(", "));
+        if (Array.isArray(s.targetAudiences)) setSelectedAudiences(s.targetAudiences as string[]);
+        if (Array.isArray(s.brandThemes)) setBrandThemes((s.brandThemes as string[]).join(", "));
+        if (typeof s.defaultOriginalityLevel === "number") setDefaultOriginality(s.defaultOriginalityLevel);
+        if (Array.isArray(s.defaultCtaStyles)) setDefaultCtaStyles((s.defaultCtaStyles as string[]).join(", "));
+        if (s.defaultOutputFormat) setDefaultOutputFormat(s.defaultOutputFormat as string);
+        if (typeof s.autoReview === "boolean") setAutoReview(s.autoReview);
+        if (typeof s.reviewReminders === "boolean") setReviewReminders(s.reviewReminders);
+        if (typeof s.markdownExport === "boolean") setMarkdownExport(s.markdownExport);
+        if (s.exportFormat) setExportFormat(s.exportFormat as string);
+        if (typeof s.includeRaw === "boolean") setIncludeRaw(s.includeRaw);
+        if (typeof s.includeGenerated === "boolean") setIncludeGenerated(s.includeGenerated);
+      }
+
+      if (creatorsRes.status === "fulfilled" && Array.isArray(creatorsRes.value) && creatorsRes.value.length) {
+        setCreatorsLocal(creatorsRes.value.map((c: { id: string; name: string; trustLevel?: string; platform?: string }) => ({
+          id: c.id,
+          name: c.name,
+          trustLevel: c.trustLevel || "trusted",
+          platform: c.platform || "youtube",
+        })));
+      }
+
+      setSettingsLoaded(true);
+    }
+    loadData();
+  }, []);
 
   const [exportFormat, setExportFormat] = useState("json");
   const [includeRaw, setIncludeRaw] = useState(true);

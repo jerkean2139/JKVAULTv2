@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -26,37 +26,54 @@ import {
   AUDIENCES,
 } from "@/lib/utils/constants";
 
-const MOCK_CONTENT_ITEMS = [
+const FALLBACK_CONTENT_ITEMS = [
   { id: "1", title: "Alex Hormozi - $100M Offers Framework" },
   { id: "2", title: "Content Repurposing Masterclass" },
   { id: "3", title: "The Agency Model is Dead" },
-  { id: "4", title: "How to Build Systems That Scale" },
-  { id: "5", title: "Email Sequences That Convert" },
-  { id: "6", title: "Leadership in Remote Teams" },
-  { id: "7", title: "AI Workflows for Solopreneurs" },
-  { id: "8", title: "Mindset Shifts for 7-Figure Growth" },
 ];
 
-const MOCK_CREATORS = [
+const FALLBACK_CREATORS = [
   { id: "1", name: "Alex Hormozi" },
-  { id: "2", name: "Justin Welsh" },
-  { id: "3", name: "Iman Gadzhi" },
-  { id: "4", name: "Simon Sinek" },
-  { id: "5", name: "Ed Mylett" },
+  { id: "2", name: "Simon Sinek" },
 ];
 
-const MOCK_PROJECTS = [
-  { id: "1", name: "Offer Design" },
-  { id: "2", name: "Content Engine" },
-  { id: "3", name: "Business Models" },
-  { id: "4", name: "Scaling Playbook" },
-];
+const FALLBACK_PROJECTS: { id: string; name: string }[] = [];
 
-const MOCK_CATEGORIES = ["Marketing", "Systems", "Leadership", "AI & Tech", "Mindset", "Sales"];
+const FALLBACK_CATEGORIES = ["Marketing", "Systems", "Leadership"];
 
 function GeneratePageContent() {
   const searchParams = useSearchParams();
   const preselectedContentId = searchParams.get("contentId");
+
+  const [contentItems, setContentItems] = useState(FALLBACK_CONTENT_ITEMS);
+  const [creators, setCreators] = useState(FALLBACK_CREATORS);
+  const [projects, setProjects] = useState(FALLBACK_PROJECTS);
+  const [categories, setCategories] = useState(FALLBACK_CATEGORIES);
+
+  useEffect(() => {
+    async function loadData() {
+      const [contentRes, creatorsRes, projectsRes, categoriesRes] = await Promise.allSettled([
+        fetch("/api/content?limit=50").then((r) => r.ok ? r.json() : null),
+        fetch("/api/creators").then((r) => r.ok ? r.json() : null),
+        fetch("/api/projects").then((r) => r.ok ? r.json() : null),
+        fetch("/api/categories").then((r) => r.ok ? r.json() : null),
+      ]);
+
+      if (contentRes.status === "fulfilled" && contentRes.value?.items?.length) {
+        setContentItems(contentRes.value.items.map((i: { id: string; title: string }) => ({ id: i.id, title: i.title })));
+      }
+      if (creatorsRes.status === "fulfilled" && Array.isArray(creatorsRes.value) && creatorsRes.value.length) {
+        setCreators(creatorsRes.value.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+      }
+      if (projectsRes.status === "fulfilled" && Array.isArray(projectsRes.value) && projectsRes.value.length) {
+        setProjects(projectsRes.value.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name })));
+      }
+      if (categoriesRes.status === "fulfilled" && Array.isArray(categoriesRes.value) && categoriesRes.value.length) {
+        setCategories(categoriesRes.value.map((c: { id: string; name: string }) => c.name));
+      }
+    }
+    loadData();
+  }, []);
 
   const [selectedContent, setSelectedContent] = useState<string[]>(
     preselectedContentId ? [preselectedContentId] : []
@@ -86,9 +103,9 @@ function GeneratePageContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contentIds: selectedContent,
-          creatorIds: selectedCreators,
-          projectId: selectedProject,
+          contentItemIds: selectedContent,
+          creatorId: selectedCreators[0] || undefined,
+          projectId: selectedProject || undefined,
           category: selectedCategory,
           audience: selectedAudience,
           outputType,
@@ -101,7 +118,7 @@ function GeneratePageContent() {
 
       if (res.ok) {
         const data = await res.json();
-        setGeneratedOutput(data.output || data.generatedText);
+        setGeneratedOutput(data.outputText || data.output || data.generatedText);
         setGeneratedId(data.id);
       } else {
         setGeneratedOutput(MOCK_GENERATED_OUTPUT);
@@ -168,7 +185,7 @@ function GeneratePageContent() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {MOCK_CONTENT_ITEMS.map((item) => (
+                {contentItems.map((item) => (
                   <label
                     key={item.id}
                     className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
@@ -196,7 +213,7 @@ function GeneratePageContent() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {MOCK_CREATORS.map((creator) => (
+                {creators.map((creator) => (
                   <button
                     key={creator.id}
                     onClick={() => toggleCreator(creator.id)}
@@ -223,14 +240,14 @@ function GeneratePageContent() {
                   <label className="block text-xs font-medium text-muted-foreground mb-1">Project</label>
                   <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} className={selectClasses}>
                     <option value="">None</option>
-                    {MOCK_PROJECTS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1">Category</label>
                   <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className={selectClasses}>
                     <option value="">Auto-detect</option>
-                    {MOCK_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>

@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Monitor, Copy, Check } from "lucide-react";
+import { ArrowLeft, Monitor, Copy, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+interface ScriptData {
+  id: string;
+  outputType: string;
+  generatedText: string;
+  title?: string;
+}
 
 const MOCK_SCRIPT = {
   id: "mock-gen-1",
@@ -50,17 +57,133 @@ const MOCK_SCRIPT = {
   cta: "If this framework resonated, drop a comment below with your current offer and I'll tell you the number one thing I'd change to make it irresistible.",
 };
 
+function parseScriptSections(text: string) {
+  // Try to parse structured output with HOOK/sections/CTA markers
+  const lines = text.split("\n");
+  let hook = "";
+  const scenes: { label: string; text: string; emphasis: string[] }[] = [];
+  let cta = "";
+  let currentLabel = "";
+  let currentText: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Detect HOOK
+    const hookMatch = trimmed.match(/^\*?\*?HOOK:?\*?\*?\s*(.*)/i);
+    if (hookMatch) {
+      hook = hookMatch[1].replace(/\*\*/g, "").trim();
+      continue;
+    }
+
+    // Detect CTA
+    const ctaMatch = trimmed.match(/^\*?\*?CTA:?\*?\*?\s*(.*)/i);
+    if (ctaMatch) {
+      if (currentLabel && currentText.length) {
+        scenes.push({ label: currentLabel, text: currentText.join("\n").trim(), emphasis: [] });
+        currentText = [];
+      }
+      cta = ctaMatch[1].replace(/\*\*/g, "").trim();
+      continue;
+    }
+
+    // Detect section headers like **THE PROBLEM:** or [STEP 1]
+    const sectionMatch = trimmed.match(/^\*?\*?\[?([A-Z][A-Z0-9 \-–—]+)\]?:?\*?\*?\s*$/);
+    if (sectionMatch && trimmed.length < 60) {
+      if (currentLabel && currentText.length) {
+        scenes.push({ label: currentLabel, text: currentText.join("\n").trim(), emphasis: [] });
+        currentText = [];
+      }
+      currentLabel = sectionMatch[1].trim();
+      continue;
+    }
+
+    // Separator lines
+    if (trimmed === "---" || trimmed === "***" || trimmed === "") {
+      if (!currentLabel && currentText.length === 0) continue;
+      if (trimmed === "---" || trimmed === "***") {
+        if (currentLabel && currentText.length) {
+          scenes.push({ label: currentLabel, text: currentText.join("\n").trim(), emphasis: [] });
+          currentText = [];
+          currentLabel = "";
+        }
+        continue;
+      }
+    }
+
+    currentText.push(line);
+  }
+
+  if (currentLabel && currentText.length) {
+    scenes.push({ label: currentLabel, text: currentText.join("\n").trim(), emphasis: [] });
+  }
+
+  // Extract bold text as emphasis
+  for (const scene of scenes) {
+    const boldMatches = scene.text.match(/\*\*([^*]+)\*\*/g);
+    if (boldMatches) {
+      scene.emphasis = boldMatches.map((m) => m.replace(/\*\*/g, ""));
+    }
+    scene.text = scene.text.replace(/\*\*/g, "");
+  }
+
+  // If parsing failed, treat the whole text as one section
+  if (!hook && scenes.length === 0) {
+    const sections = text.split(/---+/).filter((s) => s.trim());
+    if (sections.length > 1) {
+      hook = sections[0].replace(/\*\*/g, "").trim();
+      for (let i = 1; i < sections.length; i++) {
+        const cleaned = sections[i].replace(/\*\*/g, "").trim();
+        if (i === sections.length - 1 && cleaned.length < 200) {
+          cta = cleaned;
+        } else {
+          scenes.push({ label: `SECTION ${i}`, text: cleaned, emphasis: [] });
+        }
+      }
+    } else {
+      scenes.push({ label: "SCRIPT", text: text.replace(/\*\*/g, ""), emphasis: [] });
+    }
+  }
+
+  return { hook, scenes, cta };
+}
+
 export default function RecordViewPage() {
   const params = useParams();
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [script, setScript] = useState<typeof MOCK_SCRIPT>(MOCK_SCRIPT);
 
   const scriptId = params.id as string;
 
+  useEffect(() => {
+    async function fetchScript() {
+      try {
+        const res = await fetch(`/api/generate/${scriptId}`);
+        if (res.ok) {
+          const data: ScriptData = await res.json();
+          const parsed = parseScriptSections(data.generatedText);
+          setScript({
+            id: data.id,
+            outputType: data.outputType,
+            hook: parsed.hook || MOCK_SCRIPT.hook,
+            scenes: parsed.scenes.length > 0 ? parsed.scenes : MOCK_SCRIPT.scenes,
+            cta: parsed.cta || MOCK_SCRIPT.cta,
+          });
+        }
+      } catch {
+        // Fall back to mock
+      }
+      setLoading(false);
+    }
+    fetchScript();
+  }, [scriptId]);
+
   const fullText = [
-    `HOOK: ${MOCK_SCRIPT.hook}`,
-    ...MOCK_SCRIPT.scenes.map((s) => `[${s.label}]\n${s.text}`),
-    `CTA: ${MOCK_SCRIPT.cta}`,
+    `HOOK: ${script.hook}`,
+    ...script.scenes.map((s) => `[${s.label}]\n${s.text}`),
+    `CTA: ${script.cta}`,
   ].join("\n\n---\n\n");
 
   const handleCopy = () => {
@@ -70,9 +193,8 @@ export default function RecordViewPage() {
   };
 
   const renderWithEmphasis = (text: string, emphasisList: string[]) => {
-    let result = text;
     const parts: { text: string; bold: boolean }[] = [];
-    let remaining = result;
+    let remaining = text;
 
     for (const emp of emphasisList) {
       const idx = remaining.indexOf(emp);
@@ -99,6 +221,14 @@ export default function RecordViewPage() {
       </>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -131,14 +261,14 @@ export default function RecordViewPage() {
             HOOK
           </div>
           <p className="text-3xl font-bold leading-snug tracking-tight">
-            {MOCK_SCRIPT.hook}
+            {script.hook}
           </p>
         </div>
 
         <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-12" />
 
         <div className="space-y-16">
-          {MOCK_SCRIPT.scenes.map((scene, i) => (
+          {script.scenes.map((scene, i) => (
             <div key={i}>
               <div className="inline-block px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-bold tracking-wider uppercase mb-4">
                 {scene.label}
@@ -157,7 +287,7 @@ export default function RecordViewPage() {
             CTA
           </div>
           <p className="text-2xl font-semibold leading-relaxed">
-            {MOCK_SCRIPT.cta}
+            {script.cta}
           </p>
         </div>
       </div>

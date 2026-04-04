@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -8,6 +8,7 @@ import {
   Calendar as CalendarIcon,
   LayoutList,
   LayoutGrid,
+  Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,16 +25,13 @@ interface CalendarItem {
   status: string;
 }
 
-const MOCK_ITEMS: CalendarItem[] = [
+const FALLBACK_ITEMS: CalendarItem[] = [
   { id: "g1", title: "Stop Selling Products, Start Selling Outcomes", type: "generated", outputType: "facebook_post", date: "2026-04-07", status: "reviewed" },
   { id: "g2", title: "The Value Equation Explainer", type: "generated", outputType: "talking_head_script", date: "2026-04-08", status: "ready_to_record" },
   { id: "g5", title: "Why Your Agency Model Is Broken", type: "generated", outputType: "reel_script", date: "2026-04-10", status: "ready_to_record" },
   { id: "g3", title: "5 Systems That Eliminated 20 Hours", type: "generated", outputType: "content_idea", date: "2026-04-14", status: "draft" },
   { id: "g6", title: "Email Welcome Sequence Template", type: "generated", outputType: "email", date: "2026-04-15", status: "reviewed" },
   { id: "g4", title: "The Grand Slam Offer Checklist", type: "generated", outputType: "carousel_outline", date: "2026-04-18", status: "draft" },
-  { id: "c1", title: "AI Workflows for Solopreneurs", type: "content", date: "2026-04-21", status: "favorite" },
-  { id: "g7", title: "How AI Changed My Content Workflow", type: "generated", outputType: "blog_outline", date: "2026-04-22", status: "draft" },
-  { id: "g8", title: "3 Leadership Mistakes Killing Your Team", type: "generated", outputType: "talking_points", date: "2026-04-25", status: "draft" },
 ];
 
 const TYPE_COLORS: Record<string, string> = {
@@ -70,6 +68,66 @@ export default function CalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+  const [items, setItems] = useState<CalendarItem[]>(FALLBACK_ITEMS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadCalendarData() {
+      try {
+        const [genRes, contentRes] = await Promise.allSettled([
+          fetch("/api/generate?limit=100").then((r) => r.ok ? r.json() : null),
+          fetch("/api/content?limit=100").then((r) => r.ok ? r.json() : null),
+        ]);
+
+        const calItems: CalendarItem[] = [];
+
+        if (genRes.status === "fulfilled" && genRes.value?.items) {
+          for (const g of genRes.value.items) {
+            const date = g.targetPublishDate
+              ? new Date(g.targetPublishDate).toISOString().split("T")[0]
+              : g.createdAt
+                ? new Date(g.createdAt).toISOString().split("T")[0]
+                : null;
+            if (date) {
+              calItems.push({
+                id: g.id,
+                title: g.title || g.outputType || "Untitled Output",
+                type: "generated",
+                outputType: g.outputType,
+                date,
+                status: g.reviewStatus || "draft",
+              });
+            }
+          }
+        }
+
+        if (contentRes.status === "fulfilled" && contentRes.value?.items) {
+          for (const c of contentRes.value.items) {
+            const date = c.targetPublishDate
+              ? new Date(c.targetPublishDate).toISOString().split("T")[0]
+              : null;
+            if (date) {
+              calItems.push({
+                id: c.id,
+                title: c.title || "Untitled Content",
+                type: "content",
+                date,
+                status: c.status || "draft",
+              });
+            }
+          }
+        }
+
+        if (calItems.length > 0) {
+          setItems(calItems);
+        }
+      } catch {
+        // Keep fallback
+      }
+      setLoading(false);
+    }
+    loadCalendarData();
+  }, []);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -102,21 +160,32 @@ export default function CalendarPage() {
 
   const itemsByDate = useMemo(() => {
     const map: Record<string, CalendarItem[]> = {};
-    for (const item of MOCK_ITEMS) {
+    for (const item of items) {
       if (!map[item.date]) map[item.date] = [];
       map[item.date].push(item);
     }
     return map;
-  }, []);
+  }, [items]);
 
   const selectedItems = selectedDate ? itemsByDate[selectedDate] || [] : [];
 
   const monthItems = useMemo(() => {
     const prefix = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
-    return MOCK_ITEMS.filter((item) => item.date.startsWith(prefix)).sort(
+    return items.filter((item) => item.date.startsWith(prefix)).sort(
       (a, b) => a.date.localeCompare(b.date)
     );
-  }, [currentYear, currentMonth]);
+  }, [currentYear, currentMonth, items]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Calendar" description="Content publishing schedule" />
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -1,9 +1,18 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("Seeding database...");
+
+  // Default user
+  const passwordHash = await bcrypt.hash("admin123", 12);
+  await prisma.user.upsert({
+    where: { email: "admin@studio.com" },
+    update: {},
+    create: { email: "admin@studio.com", passwordHash, name: "Admin" },
+  });
 
   // Projects
   const projects = await Promise.all([

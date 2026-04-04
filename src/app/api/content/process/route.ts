@@ -3,19 +3,26 @@ import prisma from "@/lib/db";
 import { analyzeContent } from "@/services/ai/analysis";
 import { fetchYouTubeContent, isYouTubeUrl, isYouTubeShort } from "@/services/ingest/youtube";
 import { checkSimilarity } from "@/services/similarity/similarity-service";
+import { validateBody, processContentSchema } from "@/lib/validations";
+import { apiError } from "@/lib/api-utils";
 
 export async function POST(request: NextRequest) {
   let job;
   try {
-    const body = await request.json();
-    const { sourceType, sourceUrl, title, rawText, screenshotText } = body;
+    const raw = await request.json();
+    const parsed = validateBody(processContentSchema, raw);
+    if ("error" in parsed) {
+      return apiError(parsed.error, 400);
+    }
+
+    const { sourceType, sourceUrl, title, rawText, screenshotText } = parsed.data;
 
     // Create processing job
     job = await prisma.processingJob.create({
       data: {
         jobType: "content_analysis",
         status: "processing",
-        inputJson: body,
+        inputJson: JSON.parse(JSON.stringify(parsed.data)),
       },
     });
 
@@ -59,6 +66,11 @@ export async function POST(request: NextRequest) {
       finalSourceType = "user_content";
     }
 
+    // Validate contentText is non-empty before analysis
+    if (!contentText.trim()) {
+      return apiError("No content text available for analysis", 400);
+    }
+
     // AI Analysis
     const analysis = await analyzeContent(contentText, contentTitle);
 
@@ -92,36 +104,51 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create category associations
+    // Create category associations - batched to fix N+1 queries
     if (analysis.suggestedCategories?.length) {
-      for (const catSuggestion of analysis.suggestedCategories) {
-        const category = await prisma.category.findFirst({
-          where: { name: { equals: catSuggestion.name, mode: "insensitive" } },
+      const categoryNames = analysis.suggestedCategories.map((c) => c.name);
+      const matchingCategories = await prisma.category.findMany({
+        where: { name: { in: categoryNames, mode: "insensitive" } },
+      });
+
+      if (matchingCategories.length > 0) {
+        const categoryAssociations = matchingCategories.map((cat) => {
+          const suggestion = analysis.suggestedCategories!.find(
+            (s) => s.name.toLowerCase() === cat.name.toLowerCase()
+          );
+          return {
+            contentItemId: contentItem.id,
+            categoryId: cat.id,
+            confidenceScore: suggestion?.confidence ?? 0,
+          };
         });
-        if (category) {
-          await prisma.contentItemCategory.create({
-            data: {
-              contentItemId: contentItem.id,
-              categoryId: category.id,
-              confidenceScore: catSuggestion.confidence,
-            },
-          }).catch(() => {}); // ignore duplicate
-        }
+
+        await prisma.contentItemCategory.createMany({
+          data: categoryAssociations,
+          skipDuplicates: true,
+        });
       }
     }
 
-    // Create tag associations
+    // Create tag associations - batched to fix N+1 queries
     if (analysis.suggestedTags?.length) {
-      for (const tagName of analysis.suggestedTags) {
-        const tag = await prisma.tag.upsert({
-          where: { name: tagName.toLowerCase() },
-          update: {},
-          create: { name: tagName.toLowerCase() },
-        });
-        await prisma.contentItemTag.create({
-          data: { contentItemId: contentItem.id, tagId: tag.id },
-        }).catch(() => {}); // ignore duplicate
-      }
+      const tags = await Promise.all(
+        analysis.suggestedTags.map((tagName) =>
+          prisma.tag.upsert({
+            where: { name: tagName.toLowerCase() },
+            update: {},
+            create: { name: tagName.toLowerCase() },
+          })
+        )
+      );
+
+      await prisma.contentItemTag.createMany({
+        data: tags.map((tag) => ({
+          contentItemId: contentItem.id,
+          tagId: tag.id,
+        })),
+        skipDuplicates: true,
+      });
     }
 
     // Update processing job
@@ -145,12 +172,11 @@ export async function POST(request: NextRequest) {
     if (job) {
       await prisma.processingJob.update({
         where: { id: job.id },
-        data: { status: "failed", errorMessage: String(error) },
-      }).catch(() => {});
+        data: { status: "failed", errorMessage: "Content processing failed" },
+      }).catch((e) => {
+        if (!e.message?.includes("Unique constraint")) throw e;
+      });
     }
-    return NextResponse.json(
-      { error: "Processing failed", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return apiError("Content processing failed", 500, error);
   }
 }

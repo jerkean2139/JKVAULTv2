@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Sparkles,
   Loader2,
@@ -120,11 +121,15 @@ function GeneratePageContent() {
         const data = await res.json();
         setGeneratedOutput(data.outputText || data.output || data.generatedText);
         setGeneratedId(data.id);
+        toast.success("Content generated!");
       } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error("Generation failed", { description: err.error || "Using sample output" });
         setGeneratedOutput(MOCK_GENERATED_OUTPUT);
         setGeneratedId("mock-gen-1");
       }
     } catch {
+      toast.error("Generation failed", { description: "Using sample output" });
       setGeneratedOutput(MOCK_GENERATED_OUTPUT);
       setGeneratedId("mock-gen-1");
     }

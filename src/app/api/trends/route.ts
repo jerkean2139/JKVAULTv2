@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { refreshAndStoreTrends } from "@/services/trends/trend-service";
+import { apiError } from "@/lib/api-utils";
 
 export async function GET(request: Request) {
   try {
@@ -15,8 +16,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(trends);
   } catch (error) {
-    console.error("GET /api/trends error:", error);
-    return NextResponse.json({ error: "Failed to fetch trends" }, { status: 500 });
+    return apiError("Failed to fetch trends", 500, error);
   }
 }
 
@@ -25,7 +25,6 @@ export async function POST() {
     const count = await refreshAndStoreTrends();
     return NextResponse.json({ success: true, count });
   } catch (error) {
-    console.error("POST /api/trends error:", error);
-    return NextResponse.json({ error: "Failed to refresh trends" }, { status: 500 });
+    return apiError("Failed to refresh trends", 500, error);
   }
 }

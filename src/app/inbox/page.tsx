@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Video,
   Camera,
@@ -101,9 +102,12 @@ export default function InboxPage() {
       setProgress(100);
       setSuccess(true);
       setCreatedItemId(result.id || null);
+      toast.success("Content processed successfully!", { description: result.title || "Added to your library" });
     } catch (err) {
       clearInterval(progressInterval);
-      setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      setErrorMsg(msg);
+      toast.error("Processing failed", { description: msg });
     } finally {
       setProcessing(false);
     }

@@ -5,11 +5,45 @@ let openaiInstance: OpenAI | null = null;
 
 function getOpenAI(): OpenAI {
   if (!openaiInstance) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey && !isMockMode()) {
+      throw new Error("OPENAI_API_KEY is not set and MOCK_MODE is not enabled");
+    }
     openaiInstance = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || "",
+      apiKey: apiKey || "mock-key",
     });
   }
   return openaiInstance;
+}
+
+/**
+ * Retry wrapper with exponential backoff for transient API failures.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      // Don't retry on auth errors or invalid requests
+      if (error instanceof OpenAI.APIError) {
+        if (error.status === 401 || error.status === 403 || error.status === 400) {
+          throw error;
+        }
+      }
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.warn(`OpenAI call failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
 }
 
 export async function chatCompletion(
@@ -18,16 +52,18 @@ export async function chatCompletion(
   options?: { temperature?: number; maxTokens?: number; jsonMode?: boolean }
 ): Promise<string> {
   const openai = getOpenAI();
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || "gpt-4o",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    temperature: options?.temperature ?? 0.7,
-    max_tokens: options?.maxTokens ?? 4096,
-    ...(options?.jsonMode ? { response_format: { type: "json_object" } } : {}),
-  });
+  const response = await withRetry(() =>
+    openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: options?.temperature ?? 0.7,
+      max_tokens: options?.maxTokens ?? 4096,
+      ...(options?.jsonMode ? { response_format: { type: "json_object" } } : {}),
+    })
+  );
   return response.choices[0]?.message?.content || "";
 }
 
@@ -112,16 +148,17 @@ export async function generateDailyIdeas(context?: string): Promise<
   }
 
   const openai = getOpenAI();
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content: `You are a content strategist for a business coach serving State Farm agents, small business owners, and coaches. Generate daily content ideas that are timely, actionable, and specific.`,
-      },
-      {
-        role: "user",
-        content: `Generate 5 content ideas for today. ${context ? `Context: ${context}` : ""}
+  const response = await withRetry(() =>
+    openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You are a content strategist for a business coach serving State Farm agents, small business owners, and coaches. Generate daily content ideas that are timely, actionable, and specific.`,
+        },
+        {
+          role: "user",
+          content: `Generate 5 content ideas for today. ${context ? `Context: ${context}` : ""}
 
 Return a JSON array of objects with these fields:
 - title: compelling working title
@@ -131,12 +168,13 @@ Return a JSON array of objects with these fields:
 - urgency: high, medium, or low
 
 Return ONLY valid JSON.`,
-      },
-    ],
-    temperature: 0.9,
-    max_tokens: 2048,
-    response_format: { type: "json_object" },
-  });
+        },
+      ],
+      temperature: 0.9,
+      max_tokens: 2048,
+      response_format: { type: "json_object" },
+    })
+  );
 
   const raw = response.choices[0]?.message?.content || "[]";
   try {

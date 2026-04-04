@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { validateBody, validateParams, createContentSchema } from "@/lib/validations";
+import { apiError } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,8 +12,7 @@ export async function GET(request: NextRequest) {
     const creatorId = searchParams.get("creatorId");
     const status = searchParams.get("status");
     const sourceType = searchParams.get("sourceType");
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const { page, limit } = validateParams(searchParams);
     const sort = searchParams.get("sort") || "newest";
 
     const where: Record<string, unknown> = {};
@@ -54,30 +55,34 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ items, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
-    console.error("GET /api/content error:", error);
-    return NextResponse.json({ error: "Failed to fetch content" }, { status: 500 });
+    return apiError("Failed to fetch content", 500, error);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const raw = await request.json();
+    const parsed = validateBody(createContentSchema, raw);
+    if ("error" in parsed) {
+      return apiError(parsed.error, 400);
+    }
+
+    const { data } = parsed;
     const item = await prisma.contentItem.create({
       data: {
-        sourceType: body.sourceType || "manual_text",
-        sourceUrl: body.sourceUrl,
-        title: body.title || "Untitled",
-        creatorNameRaw: body.creatorNameRaw,
-        rawText: body.rawText,
-        transcriptText: body.transcriptText,
-        status: body.status || "draft",
-        projectId: body.projectId,
-        savedCreatorId: body.savedCreatorId,
+        sourceType: data.sourceType,
+        sourceUrl: data.sourceUrl,
+        title: data.title,
+        creatorNameRaw: data.creatorNameRaw,
+        rawText: data.rawText,
+        transcriptText: data.transcriptText,
+        status: data.status,
+        projectId: data.projectId,
+        savedCreatorId: data.savedCreatorId,
       },
     });
     return NextResponse.json(item, { status: 201 });
   } catch (error) {
-    console.error("POST /api/content error:", error);
-    return NextResponse.json({ error: "Failed to create content" }, { status: 500 });
+    return apiError("Failed to create content", 500, error);
   }
 }

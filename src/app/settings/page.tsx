@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   Save,
   Loader2,
@@ -157,8 +158,9 @@ export default function SettingsPage() {
           includeGenerated,
         }),
       });
+      toast.success("Settings saved");
     } catch {
-      // API not ready
+      toast.error("Failed to save settings");
     }
     setSaving(false);
     setSaved(true);

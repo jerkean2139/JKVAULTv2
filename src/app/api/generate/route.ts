@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { generateContent } from "@/services/ai/generator";
 import { checkSimilarity } from "@/services/similarity/similarity-service";
+import { validateBody, validateParams, generateContentSchema } from "@/lib/validations";
+import { apiError } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,8 +11,7 @@ export async function GET(request: NextRequest) {
     const outputType = searchParams.get("outputType");
     const reviewStatus = searchParams.get("reviewStatus");
     const contentItemId = searchParams.get("contentItemId");
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const { page, limit } = validateParams(searchParams);
 
     const where: Record<string, unknown> = {};
     if (outputType) where.outputType = outputType;
@@ -34,25 +35,22 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ items, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
-    console.error("GET /api/generate error:", error);
-    return NextResponse.json({ error: "Failed to fetch outputs" }, { status: 500 });
+    return apiError("Failed to fetch outputs", 500, error);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const validation = validateBody(generateContentSchema, body);
+    if ("error" in validation) {
+      return apiError(validation.error, 400);
+    }
+
     const {
-      contentItemIds,
-      creatorId,
-      projectId,
-      outputType,
-      contentMode,
-      audience,
-      originalityLevel,
-      meshWithMethodology,
-      toneNotes,
-    } = body;
+      contentItemIds, creatorId, projectId, outputType, contentMode,
+      audience, originalityLevel, meshWithMethodology, toneNotes,
+    } = validation.data;
 
     // Gather source texts
     const sourceTexts: string[] = [];
@@ -90,7 +88,7 @@ export async function POST(request: NextRequest) {
       outputType: outputType || "content_idea",
       contentMode,
       audience,
-      originalityLevel,
+      originalityLevel: String(originalityLevel || "medium"),
       meshWithMethodology,
       methodologySettings,
       toneNotes,
@@ -110,7 +108,7 @@ export async function POST(request: NextRequest) {
         title: result.title,
         outputText: result.outputText,
         similarityScore: similarity.score,
-        originalityLevel: originalityLevel || "medium",
+        originalityLevel: String(originalityLevel || "medium"),
         toneMode: toneNotes || "default",
         contentMode,
         audience,
@@ -124,10 +122,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ...output, similarity }, { status: 201 });
   } catch (error) {
-    console.error("POST /api/generate error:", error);
-    return NextResponse.json(
-      { error: "Generation failed", details: error instanceof Error ? error.message : "Unknown" },
-      { status: 500 }
-    );
+    return apiError("Generation failed", 500, error);
   }
 }

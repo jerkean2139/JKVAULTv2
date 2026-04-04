@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { validateBody, updateGeneratedOutputSchema } from "@/lib/validations";
+import { apiError } from "@/lib/api-utils";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,11 +15,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         notes: { orderBy: { createdAt: "desc" } },
       },
     });
-    if (!output) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!output) return apiError("Not found", 404);
     return NextResponse.json(output);
   } catch (error) {
-    console.error("GET /api/generate/[id] error:", error);
-    return NextResponse.json({ error: "Failed to fetch output" }, { status: 500 });
+    return apiError("Failed to fetch output", 500, error);
   }
 }
 
@@ -25,20 +26,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     const { id } = await params;
     const body = await request.json();
+    const validation = validateBody(updateGeneratedOutputSchema, body);
+    if ("error" in validation) {
+      return apiError(validation.error, 400);
+    }
     const output = await prisma.generatedOutput.update({
       where: { id },
-      data: {
-        ...(body.feedbackStatus !== undefined && { feedbackStatus: body.feedbackStatus }),
-        ...(body.reviewStatus !== undefined && { reviewStatus: body.reviewStatus }),
-        ...(body.targetPublishDate !== undefined && { targetPublishDate: body.targetPublishDate }),
-        ...(body.targetPlatform !== undefined && { targetPlatform: body.targetPlatform }),
-        ...(body.title !== undefined && { title: body.title }),
-      },
+      data: validation.data,
     });
     return NextResponse.json(output);
   } catch (error) {
-    console.error("PATCH /api/generate/[id] error:", error);
-    return NextResponse.json({ error: "Failed to update output" }, { status: 500 });
+    return apiError("Failed to update output", 500, error);
   }
 }
 
@@ -48,7 +46,6 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     await prisma.generatedOutput.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/generate/[id] error:", error);
-    return NextResponse.json({ error: "Failed to delete output" }, { status: 500 });
+    return apiError("Failed to delete output", 500, error);
   }
 }

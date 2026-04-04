@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   FolderKanban,
   Plus,
@@ -8,9 +9,11 @@ import {
   Edit3,
   FileText,
   Save,
+  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -85,6 +88,7 @@ export default function ProjectsPage() {
   const [addingProject, setAddingProject] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", color: "#6366f1", description: "" });
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -131,21 +135,13 @@ export default function ProjectsPage() {
             contentCount: 0,
           },
         ]);
+        toast.success("Project created", { description: form.name });
       } else {
-        throw new Error("Failed to create");
+        const err = await res.json().catch(() => ({}));
+        toast.error("Failed to create project", { description: err.error || "Please try again" });
       }
     } catch {
-      // Fallback: add locally
-      setProjects((prev) => [
-        ...prev,
-        {
-          id: `new-${Date.now()}`,
-          name: form.name,
-          color: form.color,
-          description: form.description,
-          contentCount: 0,
-        },
-      ]);
+      toast.error("Failed to create project");
     } finally {
       setAddingProject(false);
       setForm({ name: "", color: "#6366f1", description: "" });
@@ -169,6 +165,21 @@ export default function ProjectsPage() {
   const startEdit = (project: Project) => {
     setEditingId(project.id);
     setForm({ name: project.name, color: project.color, description: project.description });
+  };
+
+  const handleDelete = async (project: Project) => {
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setProjects((prev) => prev.filter((p) => p.id !== project.id));
+        toast.success("Project deleted", { description: project.name });
+      } else {
+        toast.error("Failed to delete project");
+      }
+    } catch {
+      toast.error("Failed to delete project");
+    }
+    setDeleteTarget(null);
   };
 
   const inputClasses =
@@ -273,12 +284,14 @@ export default function ProjectsPage() {
                         />
                         <h3 className="text-sm font-semibold">{project.name}</h3>
                       </div>
-                      <button
-                        onClick={() => startEdit(project)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Edit3 className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => startEdit(project)} aria-label="Edit project">
+                          <Edit3 className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                        </button>
+                        <button onClick={() => setDeleteTarget(project)} aria-label="Delete project">
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-400" />
+                        </button>
+                      </div>
                     </div>
                     {project.description && (
                       <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
@@ -358,6 +371,15 @@ export default function ProjectsPage() {
           </Card>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete Project"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? Content items in this project won't be deleted, but they'll be unassigned.`}
+        confirmLabel="Delete"
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

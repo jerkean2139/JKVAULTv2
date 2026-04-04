@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { validateBody, feedbackSchema } from "@/lib/validations";
+import { apiError } from "@/lib/api-utils";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const { feedbackStatus } = await request.json();
+    const body = await request.json();
+    const validation = validateBody(feedbackSchema, body);
+    if ("error" in validation) {
+      return apiError(validation.error, 400);
+    }
     const output = await prisma.generatedOutput.update({
       where: { id },
-      data: { feedbackStatus },
+      data: { feedbackStatus: validation.data.feedbackStatus },
     });
     return NextResponse.json(output);
   } catch (error) {
-    console.error("POST feedback error:", error);
-    return NextResponse.json({ error: "Failed to update feedback" }, { status: 500 });
+    return apiError("Failed to update feedback", 500, error);
   }
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { validateBody, createProjectSchema } from "@/lib/validations";
+import { apiError } from "@/lib/api-utils";
 
 export async function GET() {
   try {
@@ -9,25 +11,27 @@ export async function GET() {
     });
     return NextResponse.json(projects);
   } catch (error) {
-    console.error("GET /api/projects error:", error);
-    return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
+    return apiError("Failed to fetch projects", 500, error);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const validation = validateBody(createProjectSchema, body);
+    if ("error" in validation) {
+      return apiError(validation.error, 400);
+    }
     const project = await prisma.project.create({
       data: {
-        name: body.name,
-        description: body.description,
-        color: body.color || "#6366f1",
-        icon: body.icon || "folder",
+        name: validation.data.name,
+        description: validation.data.description,
+        color: validation.data.color,
+        icon: validation.data.icon,
       },
     });
     return NextResponse.json(project, { status: 201 });
   } catch (error) {
-    console.error("POST /api/projects error:", error);
-    return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
+    return apiError("Failed to create project", 500, error);
   }
 }

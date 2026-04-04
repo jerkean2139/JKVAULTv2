@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Plus, X, Video, Camera, Globe, Shield } from "lucide-react";
+import { toast } from "sonner";
+import { Users, Plus, X, Video, Camera, Globe, Shield, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TRUST_LEVELS, TRUST_LEVEL_LABELS } from "@/lib/utils/constants";
@@ -117,6 +119,7 @@ export default function CreatorsPage() {
     trustLevel: "mixed",
     description: "",
   });
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     const fetchCreators = async () => {
@@ -167,11 +170,13 @@ export default function CreatorsPage() {
             description: created.description || newCreator.description,
           },
         ]);
+        toast.success("Creator added", { description: newCreator.name });
       } else {
-        throw new Error("Failed to create");
+        const err = await res.json().catch(() => ({}));
+        toast.error("Failed to add creator", { description: err.error || "Please try again" });
       }
     } catch {
-      // Fallback: add locally
+      toast.error("Failed to add creator");
       const created = {
         id: `new-${Date.now()}`,
         name: newCreator.name,
@@ -187,6 +192,21 @@ export default function CreatorsPage() {
       setNewCreator({ name: "", platform: "youtube", trustLevel: "mixed", description: "" });
       setShowAddDialog(false);
     }
+  };
+
+  const handleDeleteCreator = async (creator: { id: string; name: string }) => {
+    try {
+      const res = await fetch(`/api/creators/${creator.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setCreators((prev) => prev.filter((c) => c.id !== creator.id));
+        toast.success("Creator removed", { description: creator.name });
+      } else {
+        toast.error("Failed to delete creator");
+      }
+    } catch {
+      toast.error("Failed to delete creator");
+    }
+    setDeleteTarget(null);
   };
 
   return (
@@ -281,9 +301,18 @@ export default function CreatorsPage() {
                         </span>
                       ))}
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {creator.contentCount} items
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {creator.contentCount} items
+                      </span>
+                      <button
+                        onClick={(e) => { e.preventDefault(); setDeleteTarget(creator); }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label={`Delete ${creator.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-red-400" />
+                      </button>
+                    </div>
                   </div>
                 </Card>
               </Link>
@@ -365,6 +394,15 @@ export default function CreatorsPage() {
           </Card>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Remove Creator"
+        description={`Are you sure you want to remove "${deleteTarget?.name}"? Their content items will remain in your library.`}
+        confirmLabel="Remove"
+        onConfirm={() => deleteTarget && handleDeleteCreator(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

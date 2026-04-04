@@ -8,7 +8,7 @@ export interface SimilarityResult {
   notes: string;
 }
 
-function tokenize(text: string): Map<string, number> {
+export function tokenize(text: string): Map<string, number> {
   const words = text
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, "")
@@ -21,7 +21,7 @@ function tokenize(text: string): Map<string, number> {
   return freq;
 }
 
-function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
+export function cosineSimilarity(a: Map<string, number>, b: Map<string, number>): number {
   const allKeys = new Set([...a.keys(), ...b.keys()]);
   let dotProduct = 0;
   let normA = 0;
@@ -80,24 +80,28 @@ export async function checkSimilarity(
   }
 
   const inputTokens = tokenize(text);
-  const existingItems = await prisma.contentItem.findMany({
-    where: excludeId ? { id: { not: excludeId } } : undefined,
-    select: { id: true, title: true, shortSummary: true, detailedSummary: true, rawText: true },
-    take: 100,
-    orderBy: { createdAt: "desc" },
-  });
 
-  const existingOutputs = await prisma.generatedOutput.findMany({
-    select: { id: true, title: true, outputText: true },
-    take: 100,
-    orderBy: { createdAt: "desc" },
-  });
+  // Fetch only lightweight fields needed for comparison
+  // Use shortSummary instead of full rawText to reduce memory usage
+  const [existingItems, existingOutputs] = await Promise.all([
+    prisma.contentItem.findMany({
+      where: excludeId ? { id: { not: excludeId } } : undefined,
+      select: { id: true, title: true, shortSummary: true },
+      take: 200,
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.generatedOutput.findMany({
+      select: { id: true, title: true, outputText: true },
+      take: 100,
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   let maxScore = 0;
   const similarItems: { id: string; title: string; score: number }[] = [];
 
   for (const item of existingItems) {
-    const itemText = [item.rawText, item.shortSummary, item.detailedSummary].filter(Boolean).join(" ");
+    const itemText = item.shortSummary || item.title;
     if (!itemText) continue;
     const score = cosineSimilarity(inputTokens, tokenize(itemText));
     if (score > 0.2) {
@@ -106,8 +110,10 @@ export async function checkSimilarity(
     if (score > maxScore) maxScore = score;
   }
 
+  // For generated outputs, compare against a truncated version to save memory
   for (const output of existingOutputs) {
-    const score = cosineSimilarity(inputTokens, tokenize(output.outputText));
+    const truncated = output.outputText.slice(0, 2000);
+    const score = cosineSimilarity(inputTokens, tokenize(truncated));
     if (score > 0.2) {
       similarItems.push({ id: output.id, title: output.title, score: Math.round(score * 100) / 100 });
     }

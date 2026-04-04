@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { apiError } from "@/lib/api-utils";
+
+const MAX_KEY_LENGTH = 200;
+
+function validateSettingsKeys(keys: string[]): string | null {
+  for (const key of keys) {
+    if (typeof key !== "string" || key.length === 0 || key.length > MAX_KEY_LENGTH) {
+      return `Setting key must be a non-empty string of at most ${MAX_KEY_LENGTH} characters`;
+    }
+  }
+  return null;
+}
 
 export async function GET() {
   try {
@@ -10,8 +22,7 @@ export async function GET() {
     }
     return NextResponse.json(result);
   } catch (error) {
-    console.error("GET /api/settings error:", error);
-    return NextResponse.json({ error: "Failed to fetch settings" }, { status: 500 });
+    return apiError("Failed to fetch settings", 500, error);
   }
 }
 
@@ -28,7 +39,10 @@ async function handleUpsert(request: NextRequest) {
     const body = await request.json();
 
     if (body.settings) {
-      // Batch update multiple settings
+      const keys = Object.keys(body.settings);
+      const keyError = validateSettingsKeys(keys);
+      if (keyError) return apiError(keyError, 400);
+
       for (const [key, value] of Object.entries(body.settings)) {
         await prisma.appSetting.upsert({
           where: { key },
@@ -37,14 +51,19 @@ async function handleUpsert(request: NextRequest) {
         });
       }
     } else if (body.key && body.value !== undefined) {
-      // Single setting update
+      const keyError = validateSettingsKeys([body.key]);
+      if (keyError) return apiError(keyError, 400);
+
       await prisma.appSetting.upsert({
         where: { key: body.key },
         update: { valueJson: body.value },
         create: { key: body.key, valueJson: body.value },
       });
     } else {
-      // Treat entire body as key-value pairs to save
+      const keys = Object.keys(body);
+      const keyError = validateSettingsKeys(keys);
+      if (keyError) return apiError(keyError, 400);
+
       for (const [key, value] of Object.entries(body)) {
         await prisma.appSetting.upsert({
           where: { key },
@@ -56,7 +75,6 @@ async function handleUpsert(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Settings upsert error:", error);
-    return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
+    return apiError("Failed to update settings", 500, error);
   }
 }

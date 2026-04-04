@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateDailyIdeas } from "@/services/ai/generator";
 import prisma from "@/lib/db";
+import { apiError } from "@/lib/api-utils";
 
 export async function GET() {
   try {
@@ -13,7 +14,6 @@ export async function GET() {
     const ideas = await generateDailyIdeas(settings);
     return NextResponse.json(ideas);
   } catch (error) {
-    console.error("GET /api/ideas/daily error:", error);
-    return NextResponse.json({ error: "Failed to generate daily ideas" }, { status: 500 });
+    return apiError("Failed to generate daily ideas", 500, error);
   }
 }

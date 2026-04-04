@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { validateBody, updateContentSchema } from "@/lib/validations";
+import { apiError } from "@/lib/api-utils";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -15,45 +17,56 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         notes: { orderBy: { createdAt: "desc" } },
       },
     });
-    if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!item) return apiError("Not found", 404);
     return NextResponse.json(item);
   } catch (error) {
-    console.error("GET /api/content/[id] error:", error);
-    return NextResponse.json({ error: "Failed to fetch content" }, { status: 500 });
+    return apiError("Failed to fetch content", 500, error);
   }
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const body = await request.json();
+
+    const existing = await prisma.contentItem.findUnique({ where: { id } });
+    if (!existing) return apiError("Not found", 404);
+
+    const raw = await request.json();
+    const parsed = validateBody(updateContentSchema, raw);
+    if ("error" in parsed) {
+      return apiError(parsed.error, 400);
+    }
+
+    const { data } = parsed;
     const item = await prisma.contentItem.update({
       where: { id },
       data: {
-        ...(body.status !== undefined && { status: body.status }),
-        ...(body.title !== undefined && { title: body.title }),
-        ...(body.projectId !== undefined && { projectId: body.projectId }),
-        ...(body.savedCreatorId !== undefined && { savedCreatorId: body.savedCreatorId }),
-        ...(body.transcriptText !== undefined && { transcriptText: body.transcriptText }),
-        ...(body.needsTranscript !== undefined && { needsTranscript: body.needsTranscript }),
-        ...(body.targetPublishDate !== undefined && { targetPublishDate: body.targetPublishDate }),
-        ...(body.targetPlatform !== undefined && { targetPlatform: body.targetPlatform }),
+        ...(data.status !== undefined && { status: data.status }),
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.projectId !== undefined && { projectId: data.projectId }),
+        ...(data.savedCreatorId !== undefined && { savedCreatorId: data.savedCreatorId }),
+        ...(data.transcriptText !== undefined && { transcriptText: data.transcriptText }),
+        ...(data.needsTranscript !== undefined && { needsTranscript: data.needsTranscript }),
+        ...(data.targetPublishDate !== undefined && { targetPublishDate: data.targetPublishDate }),
+        ...(data.targetPlatform !== undefined && { targetPlatform: data.targetPlatform }),
       },
     });
     return NextResponse.json(item);
   } catch (error) {
-    console.error("PATCH /api/content/[id] error:", error);
-    return NextResponse.json({ error: "Failed to update content" }, { status: 500 });
+    return apiError("Failed to update content", 500, error);
   }
 }
 
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+
+    const existing = await prisma.contentItem.findUnique({ where: { id } });
+    if (!existing) return apiError("Not found", 404);
+
     await prisma.contentItem.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("DELETE /api/content/[id] error:", error);
-    return NextResponse.json({ error: "Failed to delete content" }, { status: 500 });
+    return apiError("Failed to delete content", 500, error);
   }
 }

@@ -51,8 +51,9 @@ async function seedDatabase() {
 
     return NextResponse.json({ success: true, message: "Database seeded! Login with admin@studio.com / admin123" });
   } catch (error) {
-    console.error("Seed error:", error);
-    return NextResponse.json({ error: "Seed failed" }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Seed error:", message);
+    return NextResponse.json({ error: "Seed failed", detail: message }, { status: 500 });
   }
 }
 

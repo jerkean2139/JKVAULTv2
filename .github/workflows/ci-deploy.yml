@@ -91,4 +91,9 @@ jobs:
         run: railway run npx prisma migrate deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Seed database (first deploy)
+        run: railway run npx tsx prisma/seed.ts
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         continue-on-error: true

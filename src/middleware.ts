@@ -2,21 +2,15 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-/**
- * Auth middleware - protects all routes except login, health, and auth endpoints.
- * When MOCK_MODE=true, auth is bypassed for local development.
- */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow these paths
+  // Always allow auth routes, login, health, seed, and static assets
   if (
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/health") ||
     pathname.startsWith("/api/seed") ||
     pathname === "/login" ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
     pathname === "/"
   ) {
     return NextResponse.next();
@@ -29,7 +23,7 @@ export async function middleware(request: NextRequest) {
 
   const token = await getToken({
     req: request,
-    secret: process.env.NEXTAUTH_SECRET || "dev-secret-change-in-production",
+    secret: process.env.NEXTAUTH_SECRET,
   });
 
   // Redirect unauthenticated users to login
@@ -47,7 +41,12 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all routes except static files
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    /*
+     * Match all paths except:
+     * - _next/static, _next/image (static files)
+     * - favicon.ico
+     * - api/auth (NextAuth handles its own auth)
+     */
+    "/((?!_next/static|_next/image|favicon.ico|api/auth).*)",
   ],
 };

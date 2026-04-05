@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Zap,
   RefreshCw,
   Lightbulb,
   Video,
@@ -11,7 +10,6 @@ import {
   AlertTriangle,
   Copy,
   Check,
-  Eye,
   Sparkles,
   Loader2,
 } from "lucide-react";

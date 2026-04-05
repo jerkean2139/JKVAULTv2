@@ -49,6 +49,7 @@ export async function analyzeContentReal(
 
 export function mockAnalyzeContent(
   title: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _text: string
 ): AnalysisResult {
   return {

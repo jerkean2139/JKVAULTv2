@@ -82,7 +82,7 @@ export default function SettingsPage() {
   const [markdownExport, setMarkdownExport] = useState(true);
 
   const [creatorsLocal, setCreatorsLocal] = useState(MOCK_CREATORS);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [, setSettingsLoaded] = useState(false);
 
   // Load saved settings and real creators on mount
   useEffect(() => {

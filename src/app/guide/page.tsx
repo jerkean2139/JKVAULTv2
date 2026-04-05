@@ -5,7 +5,6 @@ import {
   Inbox,
   Library,
   Sparkles,
-  TrendingUp,
   Users,
   Settings,
   Video,
@@ -14,7 +13,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Lightbulb,
-  Calendar,
   Monitor,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";

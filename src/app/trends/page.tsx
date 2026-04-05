@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import {
   TrendingUp,
-  TrendingDown,
   RefreshCw,
   Loader2,
   AlertTriangle,
@@ -13,7 +12,6 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TREND_AREAS } from "@/lib/utils/constants";
 
 const TREND_ICONS: Record<string, string> = {
   coaching: "bg-emerald-500/20 text-emerald-400",

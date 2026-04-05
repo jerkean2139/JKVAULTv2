@@ -3,14 +3,15 @@ import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
 
 /**
- * POST /api/seed - Seeds the database with initial data.
+ * Seeds the database with initial data.
  * Only works if no users exist yet (first-time setup).
+ * Supports both GET (visit in browser) and POST.
  */
-export async function POST() {
+async function seedDatabase() {
   try {
     const userCount = await prisma.user.count();
     if (userCount > 0) {
-      return NextResponse.json({ error: "Database already seeded" }, { status: 400 });
+      return NextResponse.json({ message: "Database already seeded - you're good to go!", alreadySeeded: true });
     }
 
     // Create default admin user
@@ -48,9 +49,19 @@ export async function POST() {
       });
     }
 
-    return NextResponse.json({ success: true, message: "Database seeded with admin user, categories, and projects" });
+    return NextResponse.json({ success: true, message: "Database seeded! Login with admin@studio.com / admin123" });
   } catch (error) {
     console.error("Seed error:", error);
     return NextResponse.json({ error: "Seed failed" }, { status: 500 });
   }
+}
+
+// GET so you can just visit /api/seed in your browser
+export async function GET() {
+  return seedDatabase();
+}
+
+// POST for programmatic access
+export async function POST() {
+  return seedDatabase();
 }
